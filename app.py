@@ -5,6 +5,7 @@ from commands.version import show_gc_version
 from commands.status import show_gc_status
 from commands.help import show_help
 from commands.latest import show_gc_latest
+from commands.pushed import show_gc_push
      
 def main():
     print("===============================")   
@@ -21,6 +22,7 @@ def main():
     "version": show_gc_version,
     "status": show_gc_status,
     "latest": show_gc_latest,
+    "pushed" : show_gc_push,
     "help": show_help,
 }
     if command in commands:
