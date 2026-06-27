@@ -4,6 +4,7 @@ def show_help():
     
     print("version   show installed Git version")
     print("status    show Git status")
+    print("latest    show Latest commit")
     
     print("Type")
     
