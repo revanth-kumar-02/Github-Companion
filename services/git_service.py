@@ -21,7 +21,7 @@ def get_git_status():
 
 def get_latest_commit():
     result = subprocess.run(
-        ["git","log -1"],
+        ["git","log","-1"],
         capture_output=True,
         text=True,
     )
