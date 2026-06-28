@@ -1,5 +1,11 @@
 """GitHub API integration service."""
+import requests
 
+def get_github_profile():
+    response = requests.get("https://api.github.com/users/revanth-kumar-02")
 
-def fetch_github_data():
-    print("Fetching GitHub data...")
+    profile = response.json()
+    
+    return profile
+    
+    
