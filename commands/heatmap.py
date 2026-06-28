@@ -1,4 +1,3 @@
-"""Heatmap command for GitHub Companion."""
 
 
 def show_heatmap():

@@ -1,4 +1,4 @@
-"""GitHub API integration service."""
+
 import requests
 
 def get_github_profile():
