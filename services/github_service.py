@@ -8,8 +8,8 @@ def get_github_profile():
     return response.json()
     
 def get_github_repositories():
-    repositories = get_github_username()
-    response = requests.get(f"{GITHUB_API}/users/{repositories}")
+    username = get_github_username()
+    response = requests.get(f"{GITHUB_API}/users/{username}/repos")
     repos = response.json()
-    for repo in repos:
-        print(repo["name"])
+    for index,repo in enumerate(repos,start=1):
+        print(f"{index}. {repo['name']}")
