@@ -7,6 +7,7 @@ from commands.help import show_help
 from commands.latest import show_gc_latest
 from commands.pushed import show_gc_push
 from commands.profile import show_gc_profile
+from commands.repos import show_gc_repo
 from utils.ui import header
 
 
@@ -25,6 +26,7 @@ def main():
         "latest": show_gc_latest,
         "pushed": show_gc_push,
         "profile": show_gc_profile,
+        "repos" : show_gc_repo,
         "help": show_help,
     }
 

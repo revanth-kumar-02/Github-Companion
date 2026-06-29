@@ -5,9 +5,11 @@ import requests
 def get_github_profile():
     username = get_github_username()
     response = requests.get(f"{GITHUB_API}/users/{username}")
-
-    
-    
     return response.json()
     
-    
+def get_github_repositories():
+    repositories = get_github_username()
+    response = requests.get(f"{GITHUB_API}/users/{repositories}")
+    repos = response.json()
+    for repo in repos:
+        print(repo["name"])
