@@ -1,3 +1,5 @@
+from rich import print
+
 def show_help():   
     print()
     print("Available commands: ")

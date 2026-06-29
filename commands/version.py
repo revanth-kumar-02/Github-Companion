@@ -1,11 +1,11 @@
 from services.git_service import get_git_version
-
+from rich import print
 
 def show_gc_version():
     print()
-    print("════════════════════════════════════")
+    print("[white]" + "─" * 47 + "[/white]")
     version = get_git_version()
     print("Git Version:")
     print()
     print(version)
-    print("════════════════════════════════════")
+    print("[white]" + "─" * 47 + "[/white]")

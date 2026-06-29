@@ -1,10 +1,11 @@
 from services.github_service import get_github_profile
+from rich import print
 
 def show_gc_profile():
     profile = get_github_profile()
-
-    print("GitHub Profile")
-    print("════════════════════════════════════════════════════")
+    print()
+    print("[bold bright_white]GitHub Profile[/bold bright_white]")
+    print("[white]" + "─" * 47 + "[/white]")
     print("Username     :",profile["login"])
     print("Name         :",profile["name"])
     print("Followers    :",profile["followers"])
@@ -12,7 +13,7 @@ def show_gc_profile():
     print("Public repos :",profile["public_repos"])
     print("Location     :",profile["location"])
     print("Website      :",profile["blog"])
-    print("════════════════════════════════════════════════════")
+    print("[white]" + "─" * 47 + "[/white]")
     
     
    
