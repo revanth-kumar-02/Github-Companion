@@ -1,8 +1,12 @@
 from services.github_service import get_github_profile
+from utils.ui import error
 from rich import print
 
 def show_gc_profile():
     profile = get_github_profile()
+    if profile is None:
+        error("Unable to fetch GitHub Profile")
+    
     print()
     print("[bold bright_white]GitHub Profile[/bold bright_white]")
     print("[white]" + "─" * 47 + "[/white]")
@@ -14,6 +18,7 @@ def show_gc_profile():
     print("Location     :",profile["location"])
     print("Website      :",profile["blog"])
     print("[white]" + "─" * 47 + "[/white]")
+    
     
     
    

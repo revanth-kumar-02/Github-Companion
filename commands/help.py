@@ -1,8 +1,9 @@
 from rich import print
+from utils.ui import info
 
 def show_help():   
     print()
-    print("Available commands: ")
+    info("Available commands: ")
     print("═══════════════════════════════════════════")
     print("version   show installed Git version")
     print("status    show Git status")

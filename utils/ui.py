@@ -17,3 +17,15 @@ def header():
 
 
 
+def success(message):
+    print(f"[bold green]✅ {message}[/bold green]")   
+    
+def warning(message):
+    print(f"[bold yellow]⚠️ {message}[/bold yellow]")
+
+
+def error(message):
+    print(f"[bold red]❌ {message}[/bold red]")
+
+def info(message):
+    print(f"[bold cyan]ℹ️ {message}[/bold cyan]")

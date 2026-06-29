@@ -1,4 +1,5 @@
 from services.git_service import get_git_status
+from utils.ui import success, warning
 from rich import print
 
 def show_gc_push():
@@ -8,9 +9,9 @@ def show_gc_push():
     print("[white]" + "─" * 47 + "[/white]")
     print()
     if "up to date" in status:
-        print("✅ Latest commit is pushed.")
+        sucess("Latest commit is pushed.")
     else:
-        print("⚠ Latest commit is NOT pushed.")
+        warning("⚠ Latest commit is NOT pushed.")
     print()
     print("[white]" + "─" * 47 + "[/white]")
         
