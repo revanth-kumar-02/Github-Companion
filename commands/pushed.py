@@ -12,7 +12,7 @@ def show_gc_push():
     if "up to date" in status:
         success("Latest commit is pushed.")
     else:
-        warning("⚠ Latest commit is NOT pushed.")
+        warning(" Latest commit is NOT pushed.")
     print()
     print("[white]" + "─" * 47 + "[/white]")
         

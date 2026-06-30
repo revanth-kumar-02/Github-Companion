@@ -6,7 +6,7 @@ def show_gc_version():
     print()
     print("[white]" + "─" * 47 + "[/white]")
     version = get_git_version()
-    info("Git Version")
+    info(" Git Version")
     print()
     print(version)
     print("[white]" + "─" * 47 + "[/white]")

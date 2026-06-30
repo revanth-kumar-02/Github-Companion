@@ -3,7 +3,7 @@ from utils.ui import info
 
 def show_help():   
     print()
-    info("Available commands: ")
+    info(" Available commands: ")
     print("═══════════════════════════════════════════")
     print("version   show installed Git version")
     print("status    show Git status")
