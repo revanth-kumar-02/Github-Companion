@@ -1,15 +1,20 @@
-
-from utils.ui import success
-from utils.ui import error
+from services.github_service import repo_create
+from utils.ui import success, error
 
 
 def create_repos():
     repo_name = input("Repository Name : ")
-    descripation = input("Description : ")
-    repo_type = input("Private? (y/n): ")
-    response = create_repos(repo_name, descripation, repo_type)
-    
+    description = input("Description : ")
+    repo_type = input("Private? (y/n): ").lower()
+
+    response = repo_create(
+        repo_name,
+        description,
+        repo_type == "y"
+    )
+
     if response.status_code == 201:
         success(f"Repository '{repo_name}' created successfully.")
     else:
-        error(" Failed to create repository.")
+        error("Failed to create repository.")
+        print(response.json())  

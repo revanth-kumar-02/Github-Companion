@@ -1,7 +1,6 @@
 from services.config_service import get_github_token, get_github_username
 from utils.constants import GITHUB_API
 import requests
-from commands.create import create_repos
 
 def get_github_profile():
     username = get_github_username()
@@ -19,11 +18,11 @@ def get_github_repositories():
 
 
 def repo_create(repo_name, description, private):
-    headers={
+    headers = {
     "Authorization": f"Bearer {get_github_token()}",
     "Accept": "application/vnd.github+json",
-    "Content-Type": "application/json", 
-    }
+    "Content-Type": "application/json",
+}
     response = requests.post(f"{GITHUB_API}/user/repos",
         headers=headers,
         json={
