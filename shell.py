@@ -1,3 +1,4 @@
+from commands.create import create_repos
 from utils.ui import header
 from rich.console import Console
 from utils.ui import header
@@ -22,6 +23,7 @@ commands = {
     "version": show_gc_version,
     "heatmap": show_gc_heatmap,
     "help": show_help,
+    "create": create_repos
 }
 
 def start_shell():
