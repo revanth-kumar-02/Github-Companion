@@ -1,5 +1,6 @@
 from services.github_service import repo_create
 from utils.ui import success, error
+from rich import print
 
 
 def create_repos():
@@ -14,7 +15,15 @@ def create_repos():
     )
 
     if response.status_code == 201:
-        success(f"Repository '{repo_name}' created successfully.")
+        if response.status_code == 201:
+            repo = response.json()
+            print()
+            success(f"Repository '{repo_name}' created successfully.")
+            print(f"[bold cyan]🌐 Repository URL :[/bold cyan] [underline blue]{repo['html_url']}[/underline blue]")
+            
+
+
+
     else:
         error("Failed to create repository.")
         print(response.json())  
