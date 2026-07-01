@@ -9,6 +9,8 @@ from commands.profile import show_gc_profile
 from commands.repos import show_gc_repo
 from commands.heatmap import show_gc_heatmap
 from commands.create import create_repos
+from commands.delete import delete_repo
+from commands.rename import rename_repo
 from utils.ui import header
 from shell import start_shell
 
@@ -32,7 +34,9 @@ def main():
         "repos": show_gc_repo,
         "heatmap": show_gc_heatmap,
         "help": show_help,
-        "create": create_repos
+        "create": create_repos,
+        "delete" : delete_repo,
+        "rename": rename_repo
     }
 
     if command in commands:

@@ -1,8 +1,10 @@
-from commands.create import create_repos
 from utils.ui import header
 from rich.console import Console
 from utils.ui import header
 
+from commands.create import create_repos
+from commands.delete import delete_repo
+from commands.rename import rename_repo
 from commands.profile import show_gc_profile
 from commands.repos import show_gc_repo
 from commands.status import show_gc_status
@@ -23,7 +25,9 @@ commands = {
     "version": show_gc_version,
     "heatmap": show_gc_heatmap,
     "help": show_help,
-    "create": create_repos
+    "create": create_repos,
+    "delete": delete_repo,
+    "rename" : rename_repo
 }
 
 def start_shell():

@@ -34,12 +34,38 @@ def repo_create(repo_name, description, private):
         )
     return response
 
-def repo_delete():
+def repo_delete(repo_name):
     username = get_github_username()
-    response = requests.delete(f"{GITHUB_API}/user/repos/{repo_name}", headers=headers)
-    return response.json()
 
-def repo_rename():
+    headers = {
+        "Authorization": f"Bearer {get_github_token()}",
+        "Accept": "application/vnd.github+json",
+    }
+    url = f"{GITHUB_API}/repos/{username}/{repo_name}"
+    response = requests.delete(
+        f"{GITHUB_API}/repos/{username}/{repo_name}",
+        headers=headers,
+        timeout=10,
+    )
+
+    return response
+
+def repo_rename(old_name, new_name):
     username = get_github_username()
-    response = requests.get(f"{GITHUB_API}/users/{username}/repos/{owner}/{repo}")
-    return response.json()
+
+    headers = {
+        "Authorization": f"Bearer {get_github_token()}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    }
+
+    response = requests.patch(
+        f"{GITHUB_API}/repos/{username}/{old_name}",
+        headers=headers,
+        json={
+            "name": new_name
+        },
+        timeout=10,
+    )
+
+    return response
