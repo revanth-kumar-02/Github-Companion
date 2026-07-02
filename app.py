@@ -30,8 +30,10 @@ from shell import start_shell
 
 
 def main():
-    from services.config_service import is_configured
+    from services.config_service import is_configured, run_startup_diagnostics
     from services.setup_wizard import run_setup_wizard
+
+    run_startup_diagnostics()
 
     if not is_configured():
         success = run_setup_wizard()

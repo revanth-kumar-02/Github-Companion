@@ -29,7 +29,22 @@ def _load() -> dict:
         return {}
     with open(CONFIG_PATH, "r") as f:
         try:
-            return json.load(f)
+            data = json.load(f)
+            import os
+            from rich import print as rprint
+            debug_mode = (
+                os.environ.get("DEBUG") == "True"
+                or os.environ.get("GC_DEBUG") == "true"
+            )
+            if debug_mode:
+                or_detected = bool(data.get("openrouter_api_key"))
+                gh_detected = bool(data.get("github_token"))
+                rprint()
+                rprint("Config loaded successfully")
+                rprint(f"OpenRouter key detected: {or_detected}")
+                rprint(f"GitHub token detected: {gh_detected}")
+                rprint()
+            return data
         except Exception:
             return {}
 
@@ -95,6 +110,23 @@ def save_settings(settings: dict) -> None:
     with open(CONFIG_PATH, "w") as f:
         json.dump(settings, f, indent=4)
 
+    import os
+    from rich import print as rprint
+    debug_mode = (
+        os.environ.get("DEBUG") == "True"
+        or os.environ.get("GC_DEBUG") == "true"
+    )
+    if debug_mode:
+        keys = list(settings.keys())
+        or_val = settings.get("openrouter_api_key", "")
+        or_len = len(or_val) if or_val else 0
+        rprint()
+        rprint("✓ Config saved")
+        rprint(f"Path: {CONFIG_PATH}")
+        rprint(f"Stored keys: {keys}")
+        rprint(f"OpenRouter key length: {or_len}")
+        rprint()
+
 
 def get_custom_models() -> list[dict]:
     """Return the list of custom registered models."""
@@ -113,3 +145,48 @@ def add_custom_model(model: dict) -> None:
 def get_default_workspace() -> str:
     """Return the default workspace directory, or empty string if not set."""
     return _load().get("workspace", "")
+
+
+def run_startup_diagnostics() -> None:
+    """Print configuration diagnostics if GC_DEBUG or DEBUG env variable is set."""
+    import os
+    from rich import print as rprint
+    debug_mode = (
+        os.environ.get("DEBUG") == "True"
+        or os.environ.get("GC_DEBUG") == "true"
+    )
+    if not debug_mode:
+        return
+
+    exists = CONFIG_PATH.exists()
+    keys = []
+    or_exists = False
+    or_len = 0
+    mtime_str = "N/A"
+    
+    if exists:
+        try:
+            # Bypass load diagnostics trigger by loading directly
+            with open(CONFIG_PATH, "r") as f:
+                settings = json.load(f)
+            keys = list(settings.keys())
+            or_val = settings.get("openrouter_api_key", "")
+            or_exists = bool(or_val)
+            or_len = len(or_val) if or_val else 0
+            mtime = os.path.getmtime(CONFIG_PATH)
+            import datetime
+            mtime_str = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+        except Exception:
+            pass
+
+    rprint()
+    rprint("====================================================")
+    rprint("Configuration Startup Diagnostics")
+    rprint(f"Config path: {CONFIG_PATH}")
+    rprint(f"Config exists: {exists}")
+    rprint(f"Keys present: {keys}")
+    rprint(f"OpenRouter key exists: {or_exists}")
+    rprint(f"OpenRouter key length: {or_len}")
+    rprint(f"Last modified time of config.json: {mtime_str}")
+    rprint("====================================================")
+    rprint()

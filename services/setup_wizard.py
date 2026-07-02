@@ -347,7 +347,8 @@ def run_setup_wizard() -> bool:
         return False
 
     # ── Save settings ──────────────────────────────────────────────────────────
-    settings = {
+    settings = _load()
+    settings.update({
         "github_username": github_username,
         "github_token": github_token,
         "provider": provider,
@@ -357,7 +358,7 @@ def run_setup_wizard() -> bool:
         "assistant_model": assistant_model,
         "ollama_host": ollama_host,
         "workspace": workspace_path,
-    }
+    })
     if openrouter_key:
         settings["openrouter_api_key"] = openrouter_key
 
