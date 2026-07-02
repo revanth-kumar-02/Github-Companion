@@ -10,9 +10,15 @@ Add it to config/settings.json under "openrouter_api_key".
 Supported models include DeepSeek, Qwen, Llama, Mistral and many others.
 """
 from __future__ import annotations
+import os
+import json
+import requests
 from typing import Any
+from types import SimpleNamespace
+from rich import print as rprint
 
 from ai.providers.base_provider import BaseProvider
+from services.config_service import CONFIG_PATH
 
 
 # Mapping from logical model names (used in settings.json) to OpenRouter model IDs.
@@ -61,6 +67,26 @@ class OpenRouterProvider(BaseProvider):
         self._api_key       = api_key
         self._client        = _OpenAI(base_url=self.BASE_URL, api_key=api_key)
 
+        debug_mode = (
+            os.environ.get("DEBUG") == "True"
+            or os.environ.get("GC_DEBUG") == "true"
+        )
+        if debug_mode:
+            exists = self._api_key is not None
+            length = len(self._api_key) if self._api_key else 0
+            first_8 = self._api_key[:8] if length >= 8 else (self._api_key or "")
+            rprint()
+            rprint("====================================================")
+            rprint("Provider Initialized")
+            rprint(f"Configuration Path: {CONFIG_PATH}")
+            rprint(f"Provider: OpenRouter")
+            rprint(f"Model: {self._model}")
+            rprint(f"API Key Exists: {exists}")
+            rprint(f"API Key Length: {length}")
+            rprint(f"First 8 characters: {first_8}")
+            rprint("====================================================")
+            rprint()
+
     # ── BaseProvider interface ─────────────────────────────────────────────────
 
     @property
@@ -76,26 +102,14 @@ class OpenRouterProvider(BaseProvider):
         messages: list[dict[str, Any]],
         tools: list[dict] | None = None,
     ) -> Any:
-        """Send a chat completion request to OpenRouter using requests.post for direct pipeline validation and debugging."""
-        import os
-        import json
-        import requests
-        from rich import print as rprint
-        from types import SimpleNamespace
-        from services.config_service import CONFIG_PATH, get_openrouter_api_key
-
-        # 1. Verify key loading from config.json
-        api_key = get_openrouter_api_key()
-
-        # 2. Key variables
+        """Send a chat completion request to OpenRouter using self._api_key."""
+        api_key = self._api_key
         api_key_exists = api_key is not None
         api_key_len = len(api_key) if api_key else 0
         first_8 = api_key[:8] if api_key_len >= 8 else (api_key or "")
 
-        # 3. Setup endpoint
         endpoint = "https://openrouter.ai/api/v1/chat/completions"
 
-        # 4. Build headers
         headers = {
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/revanth-kumar-02/Github-Companion",
@@ -107,7 +121,6 @@ class OpenRouterProvider(BaseProvider):
             headers["Authorization"] = f"Bearer {api_key}"
             auth_present = True
 
-        # 5. Build body
         payload = {
             "model": self._model,
             "messages": messages,
@@ -118,7 +131,6 @@ class OpenRouterProvider(BaseProvider):
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        # Check debug mode
         debug_mode = (
             os.environ.get("DEBUG") == "True"
             or os.environ.get("GC_DEBUG") == "true"
@@ -127,43 +139,36 @@ class OpenRouterProvider(BaseProvider):
         if debug_mode:
             masked_key = f"Bearer {first_8}" + "*" * (api_key_len - 8) if api_key else "None"
             rprint()
-            rprint("--------------------------------------------------")
-            rprint("Configuration Loaded")
-            rprint()
-            rprint(f"Provider: OpenRouter")
-            rprint(f"API Key Exists: {api_key_exists}")
-            rprint(f"API Key Length: {api_key_len}")
-            rprint(f"First 8 characters: {first_8}")
-            rprint(f"Model: {self._model}")
-            rprint(f"Endpoint: {endpoint}")
-            rprint("--------------------------------------------------")
-            rprint("Headers")
-            rprint()
-            rprint(f"Authorization Present: {auth_present}")
-            rprint(f"Authorization Header: {masked_key}")
-            rprint(f"Content-Type: application/json")
-            rprint("--------------------------------------------------")
+            rprint("====================================================")
+            rprint(f"Configuration Path          : {CONFIG_PATH}")
+            rprint(f"Provider                    : OpenRouter")
+            rprint(f"Model                       : {self._model}")
+            rprint(f"API Key Exists              : {api_key_exists}")
+            rprint(f"API Key Length              : {api_key_len}")
+            rprint(f"Provider Received API Key   : {first_8}...")
+            rprint(f"Provider Stored API Key     : {first_8}...")
+            rprint(f"Authorization Header Exists : {auth_present}")
+            rprint(f"Authorization Header        : {masked_key}")
+            rprint(f"Endpoint                    : {endpoint}")
+            rprint("====================================================")
             rprint("Request")
-            rprint()
             rprint(f"URL: {endpoint}")
             rprint(f"Model: {self._model}")
             rprint(f"Messages: {json.dumps(messages, indent=2)}")
-            rprint("--------------------------------------------------")
+            rprint("====================================================")
             rprint()
 
-        # Send Request
         try:
             resp = requests.post(endpoint, json=payload, headers=headers, timeout=60)
         except Exception as exc:
             raise RuntimeError(f"OpenRouter request failed: {exc}")
 
         if debug_mode:
-            rprint("Response")
-            rprint()
-            rprint(f"Status Code: {resp.status_code}")
-            rprint(f"Headers: {dict(resp.headers)}")
-            rprint(f"Body: {resp.text}")
-            rprint("--------------------------------------------------")
+            rprint("====================================================")
+            rprint(f"HTTP Status: {resp.status_code}")
+            rprint(f"Response Headers: {dict(resp.headers)}")
+            rprint(f"Response Body: {resp.text}")
+            rprint("====================================================")
             rprint()
 
         # Handle authentication errors
@@ -213,8 +218,6 @@ Possible causes:
             return SimpleNamespace(content=content, tool_calls=tool_calls)
         except Exception as parse_err:
             raise RuntimeError(f"Failed to parse OpenRouter response: {parse_err}. Raw body: {data}")
-
-
 
     def list_models(self) -> list[str]:
         """Return the logical model names available via OpenRouter."""
