@@ -140,17 +140,23 @@ def _config_ai() -> None:
         settings = _load()
         provider = settings.get("provider", "ollama")
         or_key = settings.get("openrouter_api_key", "")
+        nv_key = settings.get("nvidia_api_key", "")
         coding_model = settings.get("coding_model", "qwen2.5-coder")
 
-        masked_key = "Not Configured"
+        masked_or_key = "Not Configured"
         if or_key:
-            masked_key = or_key[:6] + "*" * (len(or_key) - 6) if len(or_key) > 6 else "*" * 8
+            masked_or_key = or_key[:6] + "*" * (len(or_key) - 6) if len(or_key) > 6 else "*" * 8
+
+        masked_nv_key = "Not Configured"
+        if nv_key:
+            masked_nv_key = nv_key[:6] + "*" * (len(nv_key) - 6) if len(nv_key) > 6 else "*" * 8
 
         rprint()
         rprint("[bold bright_white]AI Configuration[/bold bright_white]")
         rprint("[blue]" + "─" * 47 + "[/blue]")
-        rprint(f"  Provider              : {provider.capitalize()}")
-        rprint(f"  API Key               : {masked_key}")
+        rprint(f"  Primary Provider      : {provider.capitalize()}")
+        rprint(f"  OpenRouter API Key    : {masked_or_key}")
+        rprint(f"  NVIDIA NIM API Key    : {masked_nv_key}")
         rprint(f"  Default Coding Model  : {coding_model}")
         rprint()
 
@@ -158,47 +164,73 @@ def _config_ai() -> None:
         rprint("  [bold cyan]1[/bold cyan]. Change Provider")
         rprint("  [bold cyan]2[/bold cyan]. Change API Key")
         rprint("  [bold cyan]3[/bold cyan]. Change Default Model")
-        rprint("  [bold cyan]4[/bold cyan]. Remove API Key")
-        rprint("  [bold cyan]5[/bold cyan]. Back to GC shell")
+        rprint("  [bold cyan]4[/bold cyan]. Test Connections")
+        rprint("  [bold cyan]5[/bold cyan]. View Available Models")
+        rprint("  [bold cyan]6[/bold cyan]. Remove API Key")
+        rprint("  [bold cyan]7[/bold cyan]. Back to GC shell")
         rprint()
 
-        choice = console.input("[bold yellow]Select option (1-5) : [/bold yellow]").strip()
+        choice = console.input("[bold yellow]Select option (1-7) : [/bold yellow]").strip()
 
         if choice == "1":
             rprint("\nSelect Provider:")
             rprint("  1. Ollama")
             rprint("  2. OpenRouter")
+            rprint("  3. NVIDIA NIM")
             p_choice = console.input("> ").strip()
             if p_choice == "1":
                 settings["provider"] = "ollama"
             elif p_choice == "2":
                 settings["provider"] = "openrouter"
+            elif p_choice == "3":
+                settings["provider"] = "nvidia"
             save_settings(settings)
             success("Provider updated.")
         elif choice == "2":
-            from services.setup_wizard import get_masked_input, _validate_openrouter_key
-            new_key = get_masked_input("\nEnter OpenRouter API Key: ")
-            if new_key:
-                with console.status("[bold yellow]Validating Key...[/bold yellow]", spinner="dots"):
-                    valid = _validate_openrouter_key(new_key)
-                if valid:
-                    settings["openrouter_api_key"] = new_key
-                    save_settings(settings)
-                    success("OpenRouter key saved.")
-                else:
-                    error("Invalid OpenRouter API key.")
+            rprint("\nSelect API Key to Change:")
+            rprint("  1. OpenRouter API Key")
+            rprint("  2. NVIDIA NIM API Key")
+            k_choice = console.input("> ").strip()
+            if k_choice == "1":
+                from services.setup_wizard import get_masked_input, _validate_openrouter_key
+                new_key = get_masked_input("\nEnter OpenRouter API Key: ")
+                if new_key:
+                    with console.status("[bold yellow]Validating Key...[/bold yellow]", spinner="dots"):
+                        valid = _validate_openrouter_key(new_key)
+                    if valid:
+                        settings["openrouter_api_key"] = new_key
+                        save_settings(settings)
+                        success("OpenRouter key saved.")
+                    else:
+                        error("Invalid OpenRouter API key.")
+            elif k_choice == "2":
+                from services.setup_wizard import get_masked_input, _validate_nvidia_key
+                new_key = get_masked_input("\nEnter NVIDIA API Key: ")
+                if new_key:
+                    with console.status("[bold yellow]Validating Key...[/bold yellow]", spinner="dots"):
+                        valid = _validate_nvidia_key(new_key)
+                    if valid:
+                        settings["nvidia_api_key"] = new_key
+                        save_settings(settings)
+                        success("NVIDIA API key saved.")
+                    else:
+                        error("Invalid NVIDIA API key.")
         elif choice == "3":
             rprint("\nSelect Default Coding Model:")
-            rprint("  1. Qwen 2.5 Coder")
-            rprint("  2. DeepSeek V3")
-            rprint("  3. DeepSeek R1")
-            rprint("  4. Llama 3.3")
+            rprint("  1. Qwen 2.5 Coder (Ollama)")
+            rprint("  2. DeepSeek V3 (OpenRouter)")
+            rprint("  3. DeepSeek R1 (NVIDIA)")
+            rprint("  4. Llama 3.3 70B (NVIDIA)")
+            rprint("  5. Llama 3.1 Nemotron Ultra (NVIDIA)")
+            rprint("  6. Qwen2.5 Instruct (NVIDIA)")
             m_choice = console.input("> ").strip()
             models_map = {
                 "1": "qwen2.5-coder",
                 "2": "deepseek-v3",
                 "3": "deepseek-r1",
-                "4": "llama3.3"
+                "4": "llama-3.3-70b",
+                "5": "llama-3.1-nemotron-ultra",
+                "6": "qwen2.5-instruct"
             }
             if m_choice in models_map:
                 settings["coding_model"] = models_map[m_choice]
@@ -207,10 +239,41 @@ def _config_ai() -> None:
             else:
                 error("Invalid choice.")
         elif choice == "4":
-            settings["openrouter_api_key"] = ""
-            save_settings(settings)
-            success("OpenRouter key removed.")
-        elif choice == "5" or choice.lower() in ("exit", "back"):
+            from commands.auth import _test_connections
+            _test_connections()
+        elif choice == "5":
+            from ai.model_registry import MODELS
+            table = Table(title="Available Registry Models", show_header=True, header_style="bold yellow", border_style="purple")
+            table.add_column("Model Name", style="bold cyan")
+            table.add_column("Provider", style="green")
+            table.add_column("Model ID", style="white")
+            table.add_column("Role", style="magenta")
+            table.add_column("Rating", style="yellow")
+            table.add_column("Tools", style="white")
+            for m in MODELS:
+                table.add_row(
+                    m["name"],
+                    m["provider"].upper(),
+                    m["model_id"],
+                    m["role"],
+                    m["recommended"],
+                    "Yes" if m["supports_tools"] else "No"
+                )
+            console.print(table)
+        elif choice == "6":
+            rprint("\nSelect API Key to Remove:")
+            rprint("  1. Remove OpenRouter API Key")
+            rprint("  2. Remove NVIDIA NIM API Key")
+            r_choice = console.input("> ").strip()
+            if r_choice == "1":
+                settings["openrouter_api_key"] = ""
+                save_settings(settings)
+                success("OpenRouter key removed.")
+            elif r_choice == "2":
+                settings["nvidia_api_key"] = ""
+                save_settings(settings)
+                success("NVIDIA NIM key removed.")
+        elif choice == "7" or choice.lower() in ("exit", "back"):
             break
         else:
             error("Invalid choice.")

@@ -176,6 +176,7 @@ def run_setup_wizard() -> bool:
     # ── STEP 2: AI Provider Selection ──────────────────────────────────────────
     provider = "ollama"
     openrouter_key = ""
+    nvidia_key = ""
     ollama_host = "http://localhost:11434"
     
     while True:
@@ -186,7 +187,9 @@ def run_setup_wizard() -> bool:
         rprint("      Offline - No API Key Required\n")
         rprint("  [bold cyan][2][/bold cyan] OpenRouter")
         rprint("      Cloud AI Models\n")
-        rprint("  [bold cyan][3][/bold cyan] Skip for Now\n")
+        rprint("  [bold cyan][3][/bold cyan] NVIDIA NIM")
+        rprint("      High-performance optimized inference\n")
+        rprint("  [bold cyan][4][/bold cyan] Skip for Now\n")
         
         choice = console.input("[bold purple]> [/bold purple]").strip()
         
@@ -225,14 +228,39 @@ def run_setup_wizard() -> bool:
                         provider = "ollama"  # Fallback to Ollama
                         break
             break
-            
+
         elif choice == "3":
+            provider = "nvidia"
+            key_valid = False
+            while not key_valid:
+                rprint("\n[bold white]NVIDIA API Key[/bold white]")
+                nvidia_key = get_masked_input("> ")
+                if not nvidia_key:
+                    rprint("[bold red]❌ API Key is required for NVIDIA NIM.[/bold red]")
+                    continue
+
+                with console.status("[bold yellow]Validating NVIDIA key...[/bold yellow]", spinner="dots"):
+                    valid_key = _validate_nvidia_key(nvidia_key)
+
+                if valid_key:
+                    rprint("[bold green]✓ NVIDIA API Key is valid[/bold green]")
+                    key_valid = True
+                    console.input("\nPress Enter to continue...")
+                else:
+                    rprint("[bold red]❌ Invalid NVIDIA API Key.[/bold red]")
+                    retry_key = console.input("\nTry key again? (y/n) : ").strip().lower()
+                    if retry_key != "y":
+                        provider = "ollama"  # Fallback to Ollama
+                        break
+            break
+            
+        elif choice == "4":
             provider = "ollama"
             rprint("\n[dim]AI setup skipped. Defaulting to Ollama.[/dim]")
             console.input("\nPress Enter to continue...")
             break
         else:
-            rprint("[bold red]❌ Invalid choice. Select 1, 2, or 3.[/bold red]")
+            rprint("[bold red]❌ Invalid choice. Select 1, 2, 3, or 4.[/bold red]")
             console.input("\nPress Enter to try again...")
 
     # ── STEP 3: Default AI Model Selection ─────────────────────────────────────
@@ -258,6 +286,31 @@ def run_setup_wizard() -> bool:
                 break
             elif model_choice == "3":
                 coding_model = "llama3.3"
+                break
+            else:
+                rprint("[bold red]❌ Invalid choice. Select 1, 2, or 3.[/bold red]")
+    elif provider == "nvidia":
+        rprint("Choose Default Coding Model:\n")
+        rprint("  [bold cyan][1][/bold cyan] Llama 3.3 70B ⭐ Recommended")
+        rprint("  [bold cyan][2][/bold cyan] Qwen2.5 Instruct")
+        rprint("  [bold cyan][3][/bold cyan] DeepSeek R1\n")
+        
+        while True:
+            model_choice = console.input("[bold purple]> [/bold purple]").strip()
+            if model_choice == "1":
+                coding_model = "llama-3.3-70b"
+                assistant_model = "llama-3.1-nemotron-ultra"
+                reasoning_model = "deepseek-r1"
+                break
+            elif model_choice == "2":
+                coding_model = "qwen2.5-instruct"
+                assistant_model = "qwen2.5-instruct"
+                reasoning_model = "deepseek-r1"
+                break
+            elif model_choice == "3":
+                coding_model = "deepseek-r1"
+                assistant_model = "llama-3.1-nemotron-ultra"
+                reasoning_model = "deepseek-r1"
                 break
             else:
                 rprint("[bold red]❌ Invalid choice. Select 1, 2, or 3.[/bold red]")
@@ -361,6 +414,8 @@ def run_setup_wizard() -> bool:
     })
     if openrouter_key:
         settings["openrouter_api_key"] = openrouter_key
+    if nvidia_key:
+        settings["nvidia_api_key"] = nvidia_key
 
     try:
         ensure_gc_directories()
@@ -434,6 +489,16 @@ def _validate_openrouter_key(api_key: str) -> bool:
         return False
 
 
+def _validate_nvidia_key(api_key: str) -> bool:
+    """Verify NVIDIA NIM key validity by hitting its models endpoint."""
+    try:
+        headers = {"Authorization": f"Bearer {api_key}"}
+        resp = requests.get("https://integrate.api.nvidia.com/v1/models", headers=headers, timeout=10)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
 
 def ensure_openrouter_authenticated() -> str:
     """Check if OpenRouter key is set and valid, and guide the user through setting it if not."""
@@ -474,5 +539,47 @@ def ensure_openrouter_authenticated() -> str:
             return new_key
         else:
             rprint("[bold red]❌ Invalid OpenRouter API Key. Please try again.[/bold red]")
+
+
+def ensure_nvidia_authenticated() -> str:
+    """Check if NVIDIA key is set and valid, and guide the user through setting it if not."""
+    from services.config_service import get_nvidia_api_key, save_settings, _load
+    
+    key = get_nvidia_api_key()
+    if key:
+        with console.status("[bold yellow]Validating stored NVIDIA API Key...[/bold yellow]", spinner="dots"):
+            valid = _validate_nvidia_key(key)
+        if valid:
+            return key
+        else:
+            rprint("[bold red]⚠️ Stored NVIDIA API Key is invalid or expired.[/bold red]")
+
+    rprint()
+    rprint("[bold yellow]NVIDIA NIM Configuration[/bold yellow]")
+    rprint("It looks like NVIDIA NIM has not been configured or needs re-authentication.")
+    choice = console.input("Would you like to configure it now? (y/n) : ").strip().lower()
+    if choice != "y":
+        raise RuntimeError("NVIDIA NIM is not configured.")
+
+    while True:
+        rprint("\n[bold white]Enter your NVIDIA API Key[/bold white]")
+        new_key = get_masked_input("> ")
+        if not new_key:
+            continue
+
+        with console.status("[bold yellow]Validating NVIDIA API Key...[/bold yellow]", spinner="dots"):
+            valid = _validate_nvidia_key(new_key)
+
+        if valid:
+            settings = _load()
+            settings["nvidia_api_key"] = new_key
+            save_settings(settings)
+            rprint("\n[bold green]✓ NVIDIA Connected[/bold green]")
+            rprint("[bold green]✓ API Key Verified[/bold green]")
+            rprint("[bold green]✓ Configuration Saved[/bold green]\n")
+            return new_key
+        else:
+            rprint("[bold red]❌ Invalid NVIDIA API Key. Please try again.[/bold red]")
+
 
 

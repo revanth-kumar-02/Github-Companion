@@ -16,8 +16,8 @@ from commands.heatmap import show_gc_heatmap
 from commands.search import gc_search
 from commands.readme import show_gc_readme
 from commands.ai_cmd import start_ai_mode
-from commands.ask import start_ask_mode
-from commands.code import start_code_mode
+from commands.ask import start_ask_mode, start_chat_mode
+from commands.code import start_code_mode, start_plan_mode
 from commands.models import show_models_menu
 from commands.login import login_cmd
 from commands.logout import logout_cmd
@@ -46,7 +46,9 @@ commands = {
     "readme": show_gc_readme,
     "ai": start_ai_mode,
     "ask": start_ask_mode,
+    "chat": start_chat_mode,
     "code": start_code_mode,
+    "plan": start_plan_mode,
     "models": show_models_menu,
     "login": login_cmd,
     "logout": logout_cmd,

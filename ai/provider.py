@@ -49,6 +49,33 @@ def get_provider(model_type: str = "assistant") -> "BaseProvider":
     fallback_name = get_fallback_provider()
     model_name    = _resolve_model_name(model_type)
 
+    if primary_name.lower() == "auto":
+        priority = ["ollama", "nvidia", "openrouter"]
+        model_mappings = {
+            "ollama": {
+                "coding": "qwen2.5-coder",
+                "reasoning": "deepseek-r1",
+                "assistant": "llama3.3"
+            },
+            "nvidia": {
+                "coding": "meta/llama-3.3-70b-instruct",
+                "reasoning": "deepseek/deepseek-r1",
+                "assistant": "nvidia/llama-3.1-nemotron-51b-instruct"
+            },
+            "openrouter": {
+                "coding": "deepseek-v3",
+                "reasoning": "qwq-32b-preview",
+                "assistant": "deepseek-v3"
+            }
+        }
+        for prov_name in priority:
+            target_model = model_mappings.get(prov_name, {}).get(model_type, model_name)
+            prov = _build_provider(prov_name, target_model)
+            if prov is not None and prov.health_check():
+                rprint(f"[bold green]  ✔  Auto Selected Provider: {prov_name.upper()} ({prov.model})[/bold green]")
+                return prov
+        _raise_no_provider("auto (Ollama -> NVIDIA NIM -> OpenRouter)", fallback_name)
+
     # ── Try primary ────────────────────────────────────────────────────────────
     primary = _build_provider(primary_name, model_name)
     if primary is not None and primary.health_check():
@@ -105,7 +132,9 @@ def _build_provider(provider_name: str, model_name: str) -> "BaseProvider | None
 
         if provider_name == "nvidia":
             from ai.providers.nvidia_provider import NvidiaProvider
-            return NvidiaProvider()
+            from services.config_service import get_nvidia_api_key
+            key = get_nvidia_api_key()
+            return NvidiaProvider(model_name=model_name, api_key=key)
 
         rprint(f"[red]  Unknown provider: '{provider_name}'[/red]")
         return None

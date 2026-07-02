@@ -15,6 +15,7 @@ from ai.agent import Agent
 from ai.providers.base_provider import BaseProvider
 from ai.providers.ollama_provider import OllamaProvider
 from ai.providers.openrouter_provider import OpenRouterProvider
+from ai.providers.nvidia_provider import NvidiaProvider
 from services.config_service import (
     get_custom_models,
     get_ollama_host,
@@ -64,14 +65,13 @@ def _get_selected_provider() -> BaseProvider | None:
     rprint()
     rprint("[bold bright_white]Choose Coding Model[/bold bright_white]")
     rprint("[blue]" + "─" * 47 + "[/blue]")
-    rprint("  [bold cyan]1[/bold cyan]. Qwen 2.5 Coder ⭐ [dim]Recommended[/dim]")
-    rprint("  [bold cyan]2[/bold cyan]. DeepSeek V3")
-    rprint("  [bold cyan]3[/bold cyan]. DeepSeek R1")
-    rprint("  [bold cyan]4[/bold cyan]. Llama 3.3")
+    rprint("  [bold cyan]1[/bold cyan]. Qwen 2.5 Coder (Provider: Ollama)")
+    rprint("  [bold cyan]2[/bold cyan]. DeepSeek V3 (Provider: OpenRouter)")
+    rprint("  [bold cyan]3[/bold cyan]. Llama 3.3 70B (Provider: NVIDIA NIM)")
 
     customs = get_custom_models()
-    for idx, c in enumerate(customs, start=5):
-        rprint(f"  [bold cyan]{idx}[/bold cyan]. {c.get('provider_name')} - {c.get('model_name')} ⭐")
+    for idx, c in enumerate(customs, start=4):
+        rprint(f"  [bold cyan]{idx}[/bold cyan]. {c.get('provider_name')} - {c.get('model_name')} (Custom)")
 
     rprint()
 
@@ -90,15 +90,18 @@ def _get_selected_provider() -> BaseProvider | None:
             return None
 
     elif choice == "3":
-        return _get_ollama_with_fallback("deepseek-r1")
-
-    elif choice == "4":
-        return _get_ollama_with_fallback("llama3.3")
+        from services.setup_wizard import ensure_nvidia_authenticated
+        try:
+            key = ensure_nvidia_authenticated()
+            return NvidiaProvider("meta/llama-3.3-70b-instruct", api_key=key)
+        except Exception as e:
+            rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+            return None
 
     else:
         try:
             val = int(choice)
-            idx = val - 5
+            idx = val - 4
             if 0 <= idx < len(customs):
                 from ai.providers.custom_provider import CustomProvider
                 return CustomProvider(customs[idx])
@@ -148,6 +151,7 @@ def start_code_mode() -> None:
         action = console.input("[bold yellow]Select option (Y/E/R/N) : [/bold yellow]").strip().upper()
 
         if action == "Y":
+            _execute_approved_plan(provider, plan)
             break
         elif action == "N":
             rprint("[dim]  Cancelled by user.[/dim]")
@@ -169,7 +173,90 @@ def start_code_mode() -> None:
         else:
             error("Invalid option.")
 
-    # ── Project Bootstrap Phase ─────────────────────────────────────────────────
+
+def start_plan_mode() -> None:
+    """Choose planning model and generate implementation plan (GC > plan)."""
+    rprint()
+    rprint("[bold bright_white]Choose Planning Model[/bold bright_white]")
+    rprint("[blue]" + "─" * 47 + "[/blue]")
+    rprint("  [bold cyan]1[/bold cyan]. DeepSeek R1 (Provider: NVIDIA NIM)")
+    rprint("  [bold cyan]2[/bold cyan]. QwQ 32B (Provider: OpenRouter)")
+    rprint()
+
+    choice = console.input("[bold yellow]Select planning model number : [/bold yellow]").strip()
+
+    provider = None
+    if choice == "1":
+        from services.setup_wizard import ensure_nvidia_authenticated
+        try:
+            key = ensure_nvidia_authenticated()
+            provider = NvidiaProvider("deepseek/deepseek-r1", api_key=key)
+        except Exception as e:
+            rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+            return
+    elif choice == "2":
+        from services.setup_wizard import ensure_openrouter_authenticated
+        try:
+            key = ensure_openrouter_authenticated()
+            provider = OpenRouterProvider("qwq-32b-preview", api_key=key)
+        except Exception as e:
+            rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+            return
+    else:
+        error("Invalid selection.")
+        return
+
+    rprint(f"[dim]  Selected: {provider.name} ({provider.model})[/dim]\n")
+
+    project_idea = console.input("[bold cyan]What project would you like to plan? : [/bold cyan]").strip()
+    if not project_idea:
+        error("Project idea cannot be empty.")
+        return
+
+    plan = _generate_plan(provider, project_idea)
+    if not plan:
+        error("Failed to generate implementation plan.")
+        return
+
+    # User review loop
+    while True:
+        _display_plan(plan)
+
+        rprint("\n[bold yellow]Options:[/bold yellow]")
+        rprint("  [bold green]Y[/bold green]. Approve and Start Coding")
+        rprint("  [bold cyan]E[/bold cyan]. Edit Plan")
+        rprint("  [bold magenta]R[/bold magenta]. Regenerate Plan")
+        rprint("  [bold red]N[/bold red]. Cancel")
+        rprint()
+
+        action = console.input("[bold yellow]Select option (Y/E/R/N) : [/bold yellow]").strip().upper()
+
+        if action == "Y":
+            _execute_approved_plan(provider, plan)
+            break
+        elif action == "N":
+            rprint("[dim]  Cancelled by user.[/dim]")
+            return
+        elif action == "R":
+            with console.status("[bold yellow]  Regenerating new plan...[/bold yellow]", spinner="dots"):
+                plan = _generate_plan(provider, project_idea)
+            if not plan:
+                error("Failed to generate implementation plan.")
+                return
+        elif action == "E":
+            feedback = console.input("\n[bold cyan]What would you like to edit? : [/bold cyan]").strip()
+            if feedback:
+                with console.status("[bold yellow]  Re-planning project...[/bold yellow]", spinner="dots"):
+                    plan = _regenerate_plan(provider, project_idea, plan, feedback)
+                if not plan:
+                    error("Failed to update implementation plan.")
+                    return
+        else:
+            error("Invalid option.")
+
+
+def _execute_approved_plan(provider: BaseProvider, plan: dict) -> None:
+    """Execute code generation and bootstrapping after plan approval."""
     rprint()
     project_name = plan.get("project_name", "my-project")
     original_folder_name = _clean_project_folder_name(project_name)

@@ -38,10 +38,12 @@ def _load() -> dict:
             )
             if debug_mode:
                 or_detected = bool(data.get("openrouter_api_key"))
+                nv_detected = bool(data.get("nvidia_api_key"))
                 gh_detected = bool(data.get("github_token"))
                 rprint()
                 rprint("Config loaded successfully")
                 rprint(f"OpenRouter key detected: {or_detected}")
+                rprint(f"NVIDIA NIM key detected: {nv_detected}")
                 rprint(f"GitHub token detected: {gh_detected}")
                 rprint()
             return data
@@ -103,6 +105,15 @@ def get_openrouter_api_key() -> str:
     return key
 
 
+def get_nvidia_api_key() -> str:
+    """Return the NVIDIA NIM API key, or empty string if not configured."""
+    key = _load().get("nvidia_api_key", "")
+    if key in ("YOUR_NVIDIA_KEY_HERE", "YOUR_KEY"):
+        return ""
+    return key
+
+
+
 
 def save_settings(settings: dict) -> None:
     """Save the settings dict back to config.json."""
@@ -120,11 +131,14 @@ def save_settings(settings: dict) -> None:
         keys = list(settings.keys())
         or_val = settings.get("openrouter_api_key", "")
         or_len = len(or_val) if or_val else 0
+        nv_val = settings.get("nvidia_api_key", "")
+        nv_len = len(nv_val) if nv_val else 0
         rprint()
         rprint("✓ Config saved")
         rprint(f"Path: {CONFIG_PATH}")
         rprint(f"Stored keys: {keys}")
         rprint(f"OpenRouter key length: {or_len}")
+        rprint(f"NVIDIA NIM key length: {nv_len}")
         rprint()
 
 
@@ -162,6 +176,8 @@ def run_startup_diagnostics() -> None:
     keys = []
     or_exists = False
     or_len = 0
+    nv_exists = False
+    nv_len = 0
     mtime_str = "N/A"
     
     if exists:
@@ -173,6 +189,11 @@ def run_startup_diagnostics() -> None:
             or_val = settings.get("openrouter_api_key", "")
             or_exists = bool(or_val)
             or_len = len(or_val) if or_val else 0
+            
+            nv_val = settings.get("nvidia_api_key", "")
+            nv_exists = bool(nv_val)
+            nv_len = len(nv_val) if nv_val else 0
+            
             mtime = os.path.getmtime(CONFIG_PATH)
             import datetime
             mtime_str = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
@@ -187,6 +208,8 @@ def run_startup_diagnostics() -> None:
     rprint(f"Keys present: {keys}")
     rprint(f"OpenRouter key exists: {or_exists}")
     rprint(f"OpenRouter key length: {or_len}")
+    rprint(f"NVIDIA NIM key exists: {nv_exists}")
+    rprint(f"NVIDIA NIM key length: {nv_len}")
     rprint(f"Last modified time of config.json: {mtime_str}")
     rprint("====================================================")
     rprint()
