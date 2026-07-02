@@ -1,0 +1,164 @@
+"""Auth command — configure and verify GitHub and AI provider credentials."""
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich import print as rprint
+
+from services.config_service import _load, save_settings
+from services.setup_wizard import (
+    get_masked_input,
+    _validate_github_credentials,
+    _validate_openrouter_key,
+)
+from utils.ui import success, error, info, warning
+
+console = Console()
+
+
+def auth_cmd() -> None:
+    """Interactive authentication command loop."""
+    while True:
+        rprint()
+        rprint("[bold bright_white]Authentication Diagnostics[/bold bright_white]")
+        rprint("[blue]" + "─" * 47 + "[/blue]")
+
+        settings = _load()
+        gh_user = settings.get("github_username", "")
+        gh_tok = settings.get("github_token", "")
+        or_key = settings.get("openrouter_api_key", "")
+
+        gh_status = "[bold green]✓ Connected[/bold green]" if (gh_user and gh_tok) else "[bold red]✗ Not Configured[/bold red]"
+        or_status = "[bold green]✓ Connected[/bold green]" if or_key else "[bold red]✗ Not Configured[/bold red]"
+
+        rprint(f"  GitHub      : {gh_status}")
+        rprint(f"  OpenRouter  : {or_status}")
+        rprint()
+
+        rprint("[bold white]Choose:[/bold white]")
+        rprint("  [bold cyan]1[/bold cyan]. Configure GitHub")
+        rprint("  [bold cyan]2[/bold cyan]. Configure OpenRouter")
+        rprint("  [bold cyan]3[/bold cyan]. Test Connections")
+        rprint("  [bold cyan]4[/bold cyan]. Remove Credentials")
+        rprint("  [bold cyan]5[/bold cyan]. Back to GC shell")
+        rprint()
+
+        choice = console.input("[bold yellow]Select option (1-5) : [/bold yellow]").strip()
+
+        if choice == "1":
+            _configure_github()
+        elif choice == "2":
+            _configure_openrouter()
+        elif choice == "3":
+            _test_connections()
+        elif choice == "4":
+            _remove_credentials()
+        elif choice == "5" or choice.lower() in ("exit", "back"):
+            break
+        else:
+            error("Invalid choice.")
+
+
+def _configure_github() -> None:
+    """Prompt and validate GitHub credentials."""
+    rprint()
+    username = console.input("[bold cyan]  GitHub Username             : [/bold cyan]").strip()
+    token = get_masked_input("[bold cyan]  GitHub Personal Access Token : [/bold cyan]")
+
+    if not username or not token:
+        error("Username and Token are required.")
+        return
+
+    with console.status("[bold yellow]  Validating GitHub credentials...[/bold yellow]", spinner="dots"):
+        valid, msg = _validate_github_credentials(username, token)
+
+    if valid:
+        settings = _load()
+        settings["github_username"] = username
+        settings["github_token"] = token
+        save_settings(settings)
+        success("GitHub credentials saved successfully.")
+    else:
+        error(f"Validation failed: {msg}")
+
+
+def _configure_openrouter() -> None:
+    """Prompt and validate OpenRouter API Key."""
+    rprint()
+    key = get_masked_input("[bold cyan]  OpenRouter API Key : [/bold cyan]")
+    if not key:
+        error("API Key is required.")
+        return
+
+    with console.status("[bold yellow]  Validating OpenRouter Key...[/bold yellow]", spinner="dots"):
+        valid = _validate_openrouter_key(key)
+
+    if valid:
+        settings = _load()
+        settings["openrouter_api_key"] = key
+        save_settings(settings)
+        success("OpenRouter Connected & API Key Verified.")
+    else:
+        error("Invalid OpenRouter API Key.")
+
+
+def _test_connections() -> None:
+    """Test connections to GitHub and OpenRouter APIs."""
+    rprint()
+    settings = _load()
+    gh_user = settings.get("github_username", "")
+    gh_tok = settings.get("github_token", "")
+    or_key = settings.get("openrouter_api_key", "")
+
+    # GitHub
+    if gh_user and gh_tok:
+        with console.status("[bold yellow]Testing GitHub Connection...[/bold yellow]", spinner="dots"):
+            valid, msg = _validate_github_credentials(gh_user, gh_tok)
+        if valid:
+            success(f"GitHub: Connected as '{gh_user}'")
+        else:
+            error(f"GitHub: Connection failed: {msg}")
+    else:
+        warning("GitHub: Not configured")
+
+    # OpenRouter
+    if or_key:
+        with console.status("[bold yellow]Testing OpenRouter Connection...[/bold yellow]", spinner="dots"):
+            valid = _validate_openrouter_key(or_key)
+        if valid:
+            success("OpenRouter: Connection successful")
+        else:
+            error("OpenRouter: API Key validation failed")
+    else:
+        warning("OpenRouter: Not configured")
+
+
+def _remove_credentials() -> None:
+    """Remove user credentials interactively."""
+    rprint()
+    rprint("[bold red]Remove Credentials[/bold red]")
+    rprint("  [bold cyan]1[/bold cyan]. Remove GitHub credentials")
+    rprint("  [bold cyan]2[/bold cyan]. Remove OpenRouter credentials")
+    rprint("  [bold cyan]3[/bold cyan]. Remove Both")
+    rprint("  [bold cyan]4[/bold cyan]. Cancel")
+    rprint()
+
+    choice = console.input("[bold yellow]Select option (1-4) : [/bold yellow]").strip()
+    settings = _load()
+
+    if choice == "1":
+        settings["github_username"] = ""
+        settings["github_token"] = ""
+        save_settings(settings)
+        success("GitHub credentials removed.")
+    elif choice == "2":
+        settings["openrouter_api_key"] = ""
+        save_settings(settings)
+        success("OpenRouter key removed.")
+    elif choice == "3":
+        settings["github_username"] = ""
+        settings["github_token"] = ""
+        settings["openrouter_api_key"] = ""
+        save_settings(settings)
+        success("All credentials removed.")
+    else:
+        rprint("[dim]  Cancelled.[/dim]")

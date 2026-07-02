@@ -23,6 +23,39 @@ from utils.ui import error, success, info
 console = Console()
 
 
+def _get_ollama_with_fallback(model_id: str) -> BaseProvider | None:
+    """Check if local Ollama is active, else prompt to retry, configure OpenRouter, or cancel."""
+    from services.config_service import _load, save_settings
+    from services.setup_wizard import ensure_openrouter_authenticated
+    while True:
+        ollama = OllamaProvider(model_id, host=get_ollama_host())
+        if ollama.health_check():
+            return ollama
+
+        rprint(f"\n[bold yellow]Ollama is not installed or offline.[/bold yellow]")
+        rprint("Would you like to:")
+        rprint("  [bold cyan]1[/bold cyan]. Configure OpenRouter")
+        rprint("  [bold cyan]2[/bold cyan]. Retry")
+        rprint("  [bold cyan]3[/bold cyan]. Cancel")
+        rprint()
+
+        sub_choice = console.input("[bold purple]> [/bold purple]").strip()
+        if sub_choice == "1":
+            try:
+                key = ensure_openrouter_authenticated()
+                settings = _load()
+                settings["provider"] = "openrouter"
+                save_settings(settings)
+                return OpenRouterProvider(model_id, api_key=key)
+            except Exception as e:
+                rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+                continue
+        elif sub_choice == "2":
+            continue
+        else:
+            return None
+
+
 def _get_selected_provider() -> BaseProvider | None:
     """Show model selection menu and return the corresponding provider."""
     rprint()
@@ -42,39 +75,22 @@ def _get_selected_provider() -> BaseProvider | None:
     choice = console.input("[bold yellow]Select model number : [/bold yellow]").strip()
 
     if choice == "1":
-        # Qwen 2.5 Coder (Ollama fallback OpenRouter)
-        ollama = OllamaProvider("qwen2.5-coder", host=get_ollama_host())
-        if ollama.health_check():
-            return ollama
-        try:
-            key = get_openrouter_api_key()
-            return OpenRouterProvider("qwen2.5-coder", api_key=key)
-        except Exception:
-            raise RuntimeError(
-                "Ollama is offline and OpenRouter key is not configured.\n"
-                "  Please run Ollama locally or add openrouter_api_key to settings.json"
-            )
+        return _get_ollama_with_fallback("qwen2.5-coder")
 
     elif choice == "2":
-        # DeepSeek V3 via OpenRouter
-        key = get_openrouter_api_key()
-        return OpenRouterProvider("deepseek-v3", api_key=key)
+        from services.setup_wizard import ensure_openrouter_authenticated
+        try:
+            key = ensure_openrouter_authenticated()
+            return OpenRouterProvider("deepseek-v3", api_key=key)
+        except Exception as e:
+            rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+            return None
 
     elif choice == "3":
-        # DeepSeek R1 (Ollama fallback OpenRouter)
-        ollama = OllamaProvider("deepseek-r1", host=get_ollama_host())
-        if ollama.health_check():
-            return ollama
-        key = get_openrouter_api_key()
-        return OpenRouterProvider("deepseek-r1", api_key=key)
+        return _get_ollama_with_fallback("deepseek-r1")
 
     elif choice == "4":
-        # Llama 3.3 (Ollama fallback OpenRouter)
-        ollama = OllamaProvider("llama3.3", host=get_ollama_host())
-        if ollama.health_check():
-            return ollama
-        key = get_openrouter_api_key()
-        return OpenRouterProvider("llama3.3", api_key=key)
+        return _get_ollama_with_fallback("llama3.3")
 
     else:
         try:
@@ -87,6 +103,7 @@ def _get_selected_provider() -> BaseProvider | None:
             pass
 
     return None
+
 
 
 def start_code_mode() -> None:

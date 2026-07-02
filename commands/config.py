@@ -26,6 +26,8 @@ def config_cmd(args: list[str] = None) -> None:
         _edit_config()
     elif subcommand == "reset":
         _reset_config()
+    elif subcommand == "ai":
+        _config_ai()
     else:
         _display_config()
 
@@ -128,3 +130,86 @@ def _reset_config() -> None:
 
     rprint("[bold yellow]Starting Setup Wizard...[/bold yellow]")
     run_setup_wizard()
+
+
+def _config_ai() -> None:
+    """Interactive AI Configuration editor (config ai)."""
+    while True:
+        settings = _load()
+        provider = settings.get("provider", "ollama")
+        or_key = settings.get("openrouter_api_key", "")
+        coding_model = settings.get("coding_model", "qwen2.5-coder")
+
+        masked_key = "Not Configured"
+        if or_key:
+            masked_key = or_key[:6] + "*" * (len(or_key) - 6) if len(or_key) > 6 else "*" * 8
+
+        rprint()
+        rprint("[bold bright_white]AI Configuration[/bold bright_white]")
+        rprint("[blue]" + "─" * 47 + "[/blue]")
+        rprint(f"  Provider              : {provider.capitalize()}")
+        rprint(f"  API Key               : {masked_key}")
+        rprint(f"  Default Coding Model  : {coding_model}")
+        rprint()
+
+        rprint("[bold white]Options:[/bold white]")
+        rprint("  [bold cyan]1[/bold cyan]. Change Provider")
+        rprint("  [bold cyan]2[/bold cyan]. Change API Key")
+        rprint("  [bold cyan]3[/bold cyan]. Change Default Model")
+        rprint("  [bold cyan]4[/bold cyan]. Remove API Key")
+        rprint("  [bold cyan]5[/bold cyan]. Back to GC shell")
+        rprint()
+
+        choice = console.input("[bold yellow]Select option (1-5) : [/bold yellow]").strip()
+
+        if choice == "1":
+            rprint("\nSelect Provider:")
+            rprint("  1. Ollama")
+            rprint("  2. OpenRouter")
+            p_choice = console.input("> ").strip()
+            if p_choice == "1":
+                settings["provider"] = "ollama"
+            elif p_choice == "2":
+                settings["provider"] = "openrouter"
+            save_settings(settings)
+            success("Provider updated.")
+        elif choice == "2":
+            from services.setup_wizard import get_masked_input, _validate_openrouter_key
+            new_key = get_masked_input("\nEnter OpenRouter API Key: ")
+            if new_key:
+                with console.status("[bold yellow]Validating Key...[/bold yellow]", spinner="dots"):
+                    valid = _validate_openrouter_key(new_key)
+                if valid:
+                    settings["openrouter_api_key"] = new_key
+                    save_settings(settings)
+                    success("OpenRouter key saved.")
+                else:
+                    error("Invalid OpenRouter API key.")
+        elif choice == "3":
+            rprint("\nSelect Default Coding Model:")
+            rprint("  1. Qwen 2.5 Coder")
+            rprint("  2. DeepSeek V3")
+            rprint("  3. DeepSeek R1")
+            rprint("  4. Llama 3.3")
+            m_choice = console.input("> ").strip()
+            models_map = {
+                "1": "qwen2.5-coder",
+                "2": "deepseek-v3",
+                "3": "deepseek-r1",
+                "4": "llama3.3"
+            }
+            if m_choice in models_map:
+                settings["coding_model"] = models_map[m_choice]
+                save_settings(settings)
+                success(f"Default coding model set to {models_map[m_choice]}.")
+            else:
+                error("Invalid choice.")
+        elif choice == "4":
+            settings["openrouter_api_key"] = ""
+            save_settings(settings)
+            success("OpenRouter key removed.")
+        elif choice == "5" or choice.lower() in ("exit", "back"):
+            break
+        else:
+            error("Invalid choice.")
+

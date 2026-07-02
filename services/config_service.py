@@ -81,19 +81,12 @@ def get_ollama_host() -> str:
 
 
 def get_openrouter_api_key() -> str:
-    """
-    Return the OpenRouter API key.
-
-    Raises:
-        ValueError if the key is missing or still set to the placeholder.
-    """
+    """Return the OpenRouter API key, or empty string if not configured."""
     key = _load().get("openrouter_api_key", "")
-    if not key or key in ("YOUR_OPENROUTER_KEY_HERE", "YOUR_KEY"):
-        raise ValueError(
-            "OpenRouter API key not configured.\n"
-            "  Please edit config and set openrouter_api_key."
-        )
+    if key in ("YOUR_OPENROUTER_KEY_HERE", "YOUR_KEY"):
+        return ""
     return key
+
 
 
 def save_settings(settings: dict) -> None:

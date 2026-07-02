@@ -23,6 +23,7 @@ from commands.login import login_cmd
 from commands.logout import logout_cmd
 from commands.config import config_cmd
 from commands.doctor import doctor_cmd
+from commands.auth import auth_cmd
 
 console = Console()
 
@@ -49,6 +50,7 @@ commands = {
     "logout": logout_cmd,
     "config": config_cmd,
     "doctor": doctor_cmd,
+    "auth": auth_cmd,
 }
 
 

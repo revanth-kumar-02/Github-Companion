@@ -46,10 +46,12 @@ def show_help():
         ("code",      "AI Agent",     "Autonomous AI Coding Agent (planning + generation)"),
         ("models",    "AI Agent",     "Register and manage custom AI models"),
         # System
+        ("auth",      "System",       "Manage GitHub and OpenRouter authentication credentials"),
         ("login",     "System",       "Reconfigure GitHub credentials"),
         ("logout",    "System",       "Remove GitHub credentials"),
-        ("config",    "System",       "Display current settings. Try: 'config edit' or 'config reset'"),
+        ("config",    "System",       "Display current settings. Try: 'config edit', 'config reset', 'config ai'"),
         ("doctor",    "System",       "Diagnose Git, GitHub, Internet, and AI providers status"),
+
         ("version",   "System",       "Show installed Git version"),
         ("status",    "System",       "Show current Git status"),
         ("help",      "System",       "Show this help table"),
