@@ -6,6 +6,9 @@ import os
 import sys
 from rich.console import Console
 from rich.panel import Panel
+from rich.tree import Tree
+from rich.table import Table
+from rich.text import Text
 from rich import print as rprint
 
 from ai.agent import Agent
@@ -138,16 +141,23 @@ def start_code_mode() -> None:
         rprint("\n[bold yellow]Options:[/bold yellow]")
         rprint("  [bold green]Y[/bold green]. Approve and Start Coding")
         rprint("  [bold cyan]E[/bold cyan]. Edit Plan")
+        rprint("  [bold magenta]R[/bold magenta]. Regenerate Plan")
         rprint("  [bold red]N[/bold red]. Cancel")
         rprint()
 
-        action = console.input("[bold yellow]Select option (Y/E/N) : [/bold yellow]").strip().upper()
+        action = console.input("[bold yellow]Select option (Y/E/R/N) : [/bold yellow]").strip().upper()
 
         if action == "Y":
             break
         elif action == "N":
             rprint("[dim]  Cancelled by user.[/dim]")
             return
+        elif action == "R":
+            with console.status("[bold yellow]  Regenerating new plan...[/bold yellow]", spinner="dots"):
+                plan = _generate_plan(provider, project_idea)
+            if not plan:
+                error("Failed to generate implementation plan.")
+                return
         elif action == "E":
             feedback = console.input("\n[bold cyan]What would you like to edit? : [/bold cyan]").strip()
             if feedback:
@@ -289,21 +299,83 @@ def start_code_mode() -> None:
 def _generate_plan(provider: BaseProvider, project_idea: str) -> dict | None:
     """Request the AI to generate a structured implementation plan in JSON."""
     system_prompt = """\
-You are a Software Architect. You analyze user requests and produce a structured JSON implementation plan.
+You are a Senior Software Architect. Analyze the user's project request and generate a highly detailed, professional, structured JSON implementation plan.
 You MUST return ONLY a JSON code block inside markdown code tags (e.g. ```json ... ```).
 Do not output any introductory or conversational text, just the JSON block.
 
-The JSON object must contain these exact keys:
-- project_name: string (short, clean project name)
-- files_count: integer (estimated total files to create)
-- architecture: string (e.g. MVC, Modular, Single-file)
-- dependencies: list of strings
-- estimated_time: string (e.g. '30 sec', '1 min')
-- folder_structure: string (ascii diagram showing folders and files)
-- files: list of strings (paths to the files to create)
-- features: list of strings (key features of the app)
-- complexity: string (Simple, Medium, Complex)
-- strategy: string (short description of the implementation strategy)
+The JSON object must contain the following keys:
+{
+  "project_name": "Short, clean project identifier",
+  "project_overview": {
+    "what_is_being_built": "Detailed explanation of what is being built",
+    "primary_objective": "Primary objective of the project",
+    "target_users": "Target users of the application",
+    "expected_functionality": "Expected functionality summary",
+    "overall_architecture": "Overall architectural approach"
+  },
+  "feature_analysis": [
+    "Feature 1: short description",
+    "Feature 2: short description"
+  ],
+  "tech_stack": {
+    "language": "Language to use",
+    "framework": "Framework to use",
+    "libraries": "Key libraries to use",
+    "database": "Database to use",
+    "package_manager": "Package manager to use",
+    "testing_framework": "Testing framework",
+    "deployment_readiness": "Deployment readiness notes"
+  },
+  "project_complexity": {
+    "complexity_rating": "★★★★☆ (out of 5 stars)",
+    "estimated_files": 12,
+    "estimated_loc": 1500,
+    "estimated_time": "Estimated build time, e.g. 5 minutes",
+    "estimated_tokens": 8000
+  },
+  "folder_explanations": {
+    "folder_name/": "Short explanation of the folder's purpose"
+  },
+  "implementation_phases": [
+    {
+      "phase_name": "Phase 1: Project Initialization",
+      "tasks": ["Create project structure", "Generate config files"]
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "Dependency Name",
+      "type": "Type, e.g. Web Framework",
+      "reason": "Why it is required"
+    }
+  ],
+  "risk_analysis": [
+    "Challenge 1: short description",
+    "Challenge 2: short description"
+  ],
+  "files": [
+    "Relative path of file to create, e.g., app.py",
+    "Relative path of file to create, e.g., templates/index.html"
+  ],
+  "coding_strategy": {
+    "build_order": "Build order description",
+    "dependency_order": "Dependency order description",
+    "testing_strategy": "Testing strategy description",
+    "error_handling": "Error handling description",
+    "code_organization": "Code organization details",
+    "scalability": "Scalability details",
+    "maintainability": "Maintainability details"
+  },
+  "implementation_summary": {
+    "project_name": "Project name",
+    "framework": "Framework used",
+    "complexity": "Complexity rating",
+    "files_count": 12,
+    "dependencies_summary": "Summary of dependencies",
+    "architecture_pattern": "Architecture pattern used",
+    "estimated_build_time": "Estimated build time"
+  }
+}
 """
     prompt = f"Analyze and plan: {project_idea}"
 
@@ -325,7 +397,7 @@ The JSON object must contain these exact keys:
 def _regenerate_plan(provider: BaseProvider, project_idea: str, old_plan: dict, feedback: str) -> dict | None:
     """Update implementation plan based on user feedback."""
     system_prompt = """\
-You are a Software Architect. Update the implementation plan based on user feedback.
+You are a Senior Software Architect. Update the implementation plan based on user feedback.
 You MUST return ONLY a JSON code block inside markdown code tags (e.g. ```json ... ```).
 Keep the exact same keys as the original JSON.
 """
@@ -371,33 +443,174 @@ def _parse_json_block(content: str) -> dict | None:
 
 
 def _display_plan(plan: dict) -> None:
-    """Beautifully format the implementation plan using Rich."""
+    """Beautifully format the implementation plan using Rich Tree, Tables and Panels."""
     rprint()
-    plan_info = (
-        f"[bold white]Project :[/bold white] {plan.get('project_name', 'Unnamed')}\n"
-        f"[bold white]Files   :[/bold white] {plan.get('files_count', 0)}\n"
-        f"[bold white]Arch    :[/bold white] {plan.get('architecture', 'Standard')}\n"
-        f"[bold white]Deps    :[/bold white] {', '.join(plan.get('dependencies', [])) or 'None'}\n"
-        f"[bold white]Time    :[/bold white] {plan.get('estimated_time', 'N/A')}\n"
-        f"[bold white]Level   :[/bold white] {plan.get('complexity', 'Medium')}"
-    )
+    rprint("[bold bright_white]====================================================[/bold bright_white]")
+    rprint("[bold bright_white]           SENIOR SOFTWARE ARCHITECT PLAN           [/bold bright_white]")
+    rprint("[bold bright_white]====================================================[/bold bright_white]")
+    rprint()
 
-    console.print(Panel(
-        plan_info,
-        title="[bold green]📋 Implementation Plan[/bold green]",
-        border_style="green",
-        expand=False,
-    ))
+    # 1. Project Overview
+    overview_text = Text()
+    overview = plan.get("project_overview", {})
+    overview_text.append("• What is being built: ", style="bold cyan")
+    overview_text.append(f"{overview.get('what_is_being_built', '')}\n\n")
+    overview_text.append("• Primary Objective: ", style="bold cyan")
+    overview_text.append(f"{overview.get('primary_objective', '')}\n\n")
+    overview_text.append("• Target Users: ", style="bold cyan")
+    overview_text.append(f"{overview.get('target_users', '')}\n\n")
+    overview_text.append("• Expected Functionality: ", style="bold cyan")
+    overview_text.append(f"{overview.get('expected_functionality', '')}\n\n")
+    overview_text.append("• Overall Architecture Approach: ", style="bold cyan")
+    overview_text.append(f"{overview.get('overall_architecture', '')}")
+    console.print(Panel(overview_text, title="[bold purple]1. PROJECT OVERVIEW[/bold purple]", border_style="purple"))
+    rprint()
 
-    rprint("\n[bold cyan]✨ Key Features:[/bold cyan]")
-    for feat in plan.get("features", []):
-        rprint(f"  • {feat}")
+    # 2. Feature Analysis
+    feat_text = Text()
+    for feat in plan.get("feature_analysis", []):
+        feat_text.append("✓ ", style="bold green")
+        feat_text.append(f"{feat}\n")
+    console.print(Panel(feat_text, title="[bold purple]2. FEATURE ANALYSIS[/bold purple]", border_style="purple"))
+    rprint()
 
-    rprint("\n[bold cyan]📁 Target Folder Structure:[/bold cyan]")
-    rprint(plan.get("folder_structure", ""))
+    # 3. Tech Stack
+    stack_table = Table(show_header=True, header_style="bold yellow", border_style="purple")
+    stack_table.add_column("Component", style="bold cyan")
+    stack_table.add_column("Technology", style="white")
+    stack = plan.get("tech_stack", {})
+    stack_table.add_row("Language", stack.get("language", "N/A"))
+    stack_table.add_row("Framework", stack.get("framework", "N/A"))
+    stack_table.add_row("Libraries", stack.get("libraries", "N/A"))
+    stack_table.add_row("Database", stack.get("database", "N/A"))
+    stack_table.add_row("Package Manager", stack.get("package_manager", "N/A"))
+    stack_table.add_row("Testing Framework", stack.get("testing_framework", "N/A"))
+    stack_table.add_row("Deployment Readiness", stack.get("deployment_readiness", "N/A"))
+    console.print(Panel(stack_table, title="[bold purple]3. TECH STACK[/bold purple]", border_style="purple", expand=False))
+    rprint()
 
-    rprint("\n[bold cyan]🛠️ Implementation Strategy:[/bold cyan]")
-    rprint(plan.get("strategy", ""))
+    # 4. Project Complexity
+    comp_table = Table(show_header=True, header_style="bold yellow", border_style="purple")
+    comp_table.add_column("Metric", style="bold cyan")
+    comp_table.add_column("Estimate", style="white")
+    comp = plan.get("project_complexity", {})
+    comp_table.add_row("Complexity", comp.get("complexity_rating", "N/A"))
+    comp_table.add_row("Estimated Files", str(comp.get("estimated_files", 0)))
+    comp_table.add_row("Estimated LOC", str(comp.get("estimated_loc", 0)))
+    comp_table.add_row("Estimated Development Time", comp.get("estimated_time", "N/A"))
+    comp_table.add_row("Estimated AI Tokens", str(comp.get("estimated_tokens", 0)))
+    console.print(Panel(comp_table, title="[bold purple]4. PROJECT COMPLEXITY[/bold purple]", border_style="purple", expand=False))
+    rprint()
+
+    # 5. Project Architecture (Tree)
+    tree = Tree(f"[bold yellow]{plan.get('project_name', 'project')}/[/bold yellow]")
+    nodes = {}
+    files_list = plan.get("files", [])
+    folder_explanations = plan.get("folder_explanations", {})
+    for fpath in sorted(files_list):
+        parts = fpath.split('/')
+        current_node = tree
+        current_path = ""
+        for part in parts[:-1]:
+            current_path += part + "/"
+            if current_path not in nodes:
+                expl = folder_explanations.get(current_path, "")
+                label = f"[bold cyan]{part}/[/bold cyan]"
+                if expl:
+                    label += f" [dim]({expl})[/dim]"
+                nodes[current_path] = current_node.add(label)
+            current_node = nodes[current_path]
+        current_node.add(f"[green]{parts[-1]}[/green]")
+    console.print(Panel(tree, title="[bold purple]5. PROJECT ARCHITECTURE[/bold purple]", border_style="purple"))
+    rprint()
+
+    # 6. Implementation Phases
+    phases_text = Text()
+    for phase in plan.get("implementation_phases", []):
+        phases_text.append(f"\n{phase.get('phase_name', 'Phase')}\n", style="bold yellow")
+        for task in phase.get("tasks", []):
+            phases_text.append(f"  • {task}\n")
+    console.print(Panel(phases_text, title="[bold purple]6. IMPLEMENTATION PHASES[/bold purple]", border_style="purple"))
+    rprint()
+
+    # 7. Dependencies
+    deps_table = Table(show_header=True, header_style="bold yellow", border_style="purple")
+    deps_table.add_column("Dependency", style="bold cyan")
+    deps_table.add_column("Type", style="bold green")
+    deps_table.add_column("Purpose/Reason", style="white")
+    for dep in plan.get("dependencies", []):
+        deps_table.add_row(dep.get("name", ""), dep.get("type", ""), dep.get("reason", ""))
+    console.print(Panel(deps_table, title="[bold purple]7. DEPENDENCIES[/bold purple]", border_style="purple"))
+    rprint()
+
+    # 8. Risk Analysis
+    risks_text = Text()
+    for risk in plan.get("risk_analysis", []):
+        risks_text.append("⚠ ", style="bold red")
+        risks_text.append(f"{risk}\n")
+    console.print(Panel(risks_text, title="[bold purple]8. RISK ANALYSIS[/bold purple]", border_style="purple"))
+    rprint()
+
+    # 9. Files to Generate
+    files_text = Text()
+    for f in plan.get("files", []):
+        files_text.append("✓ ", style="bold green")
+        files_text.append(f"{f}\n")
+    console.print(Panel(files_text, title="[bold purple]9. FILES TO GENERATE[/bold purple]", border_style="purple"))
+    rprint()
+
+    # 10. Coding Strategy
+    strategy_text = Text()
+    strategy = plan.get("coding_strategy", {})
+    strategy_text.append("• Build Order: ", style="bold cyan")
+    strategy_text.append(f"{strategy.get('build_order', '')}\n\n")
+    strategy_text.append("• Dependency Order: ", style="bold cyan")
+    strategy_text.append(f"{strategy.get('dependency_order', '')}\n\n")
+    strategy_text.append("• Testing Strategy: ", style="bold cyan")
+    strategy_text.append(f"{strategy.get('testing_strategy', '')}\n\n")
+    strategy_text.append("• Error Handling: ", style="bold cyan")
+    strategy_text.append(f"{strategy.get('error_handling', '')}\n\n")
+    strategy_text.append("• Code Organization: ", style="bold cyan")
+    strategy_text.append(f"{strategy.get('code_organization', '')}\n\n")
+    strategy_text.append("• Scalability: ", style="bold cyan")
+    strategy_text.append(f"{strategy.get('scalability', '')}\n\n")
+    strategy_text.append("• Maintainability: ", style="bold cyan")
+    strategy_text.append(f"{strategy.get('maintainability', '')}")
+    console.print(Panel(strategy_text, title="[bold purple]10. CODING STRATEGY[/bold purple]", border_style="purple"))
+    rprint()
+
+    # 11. Auto Git Plan
+    git_table = Table(show_header=True, header_style="bold yellow", border_style="purple")
+    git_table.add_column("Action/Artifact", style="bold cyan")
+    git_table.add_column("Git Plan status", style="white")
+    git_table.add_row("Repository", "Will be Created")
+    git_table.add_row("Git Init", "Yes")
+    git_table.add_row(".gitignore", "Will be Generated")
+    git_table.add_row("README", "Will be Generated")
+    git_table.add_row("Initial Commit", "Will be Created")
+    git_table.add_row("GitHub Push", "Will happen after successful build")
+    console.print(Panel(git_table, title="[bold purple]11. AUTO GIT PLAN[/bold purple]", border_style="purple", expand=False))
+    rprint()
+
+    # 12. Implementation Summary
+    sum_table = Table(show_header=True, header_style="bold yellow", border_style="purple")
+    sum_table.add_column("Field", style="bold cyan")
+    sum_table.add_column("Summary", style="white")
+    summary = plan.get("implementation_summary", {})
+    sum_table.add_row("Project Name", summary.get("project_name", "N/A"))
+    sum_table.add_row("Framework", summary.get("framework", "N/A"))
+    sum_table.add_row("Complexity", summary.get("complexity", "N/A"))
+    sum_table.add_row("Files Count", str(summary.get("files_count", 0)))
+    sum_table.add_row("Dependencies", summary.get("dependencies_summary", "N/A"))
+    sum_table.add_row("Architecture Pattern", summary.get("architecture_pattern", "N/A"))
+    sum_table.add_row("Estimated Build Time", summary.get("estimated_build_time", "N/A"))
+    console.print(Panel(sum_table, title="[bold purple]12. IMPLEMENTATION SUMMARY[/bold purple]", border_style="purple", expand=False))
+    rprint()
+
+    # 13. Approval Screen Header
+    rprint("[bold bright_white]────────────────────────────────────────────────────[/bold bright_white]")
+    rprint("Ready to Build")
+    rprint("[bold bright_white]────────────────────────────────────────────────────[/bold bright_white]")
 
 
 # ── File generation & templates helpers ───────────────────────────────────────
