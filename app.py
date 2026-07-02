@@ -72,7 +72,7 @@ def main():
 
 
     if command in commands:
-        if command == "config":
+        if command in ("config", "doctor"):
             commands[command](sys.argv[2:])
         else:
             commands[command]()

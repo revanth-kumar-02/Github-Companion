@@ -71,7 +71,7 @@ def start_shell():
         args = parts[1:]
 
         if cmd in commands:
-            if cmd == "config":
+            if cmd in ("config", "doctor"):
                 commands[cmd](args)
             else:
                 commands[cmd]()

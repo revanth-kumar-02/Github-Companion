@@ -50,7 +50,7 @@ def show_help():
         ("login",     "System",       "Reconfigure GitHub credentials"),
         ("logout",    "System",       "Remove GitHub credentials"),
         ("config",    "System",       "Display current settings. Try: 'config edit', 'config reset', 'config ai'"),
-        ("doctor",    "System",       "Diagnose Git, GitHub, Internet, and AI providers status"),
+        ("doctor",    "System",       "Diagnose Git, GitHub, Internet, and AI. Try: 'doctor ai'"),
 
         ("version",   "System",       "Show installed Git version"),
         ("status",    "System",       "Show current Git status"),

@@ -16,8 +16,12 @@ from utils.ui import success, error, info, warning
 console = Console()
 
 
-def doctor_cmd() -> None:
+def doctor_cmd(args: list[str] = None) -> None:
     """Run diagnostic checks on GitHub, Git, internet connection, and AI providers."""
+    if args and args[0].lower() == "ai":
+        _doctor_ai()
+        return
+
     rprint()
     rprint("[bold bright_white]GitHub Companion Diagnostic Doctor 🩺[/bold bright_white]")
     rprint("[blue]" + "─" * 47 + "[/blue]")
@@ -142,3 +146,90 @@ def doctor_cmd() -> None:
     else:
         rprint("[bold yellow]  ⚠️ Diagnostics found issues. Some features might not work correctly.[/bold yellow]")
     rprint()
+
+
+def _doctor_ai() -> None:
+    """Run diagnostics on AI OpenRouter authentication pipeline (doctor ai)."""
+    rprint()
+    rprint("[bold bright_white]AI Authentication Diagnostics 🩺[/bold bright_white]")
+    rprint("[blue]" + "─" * 47 + "[/blue]")
+
+    settings = _load()
+    provider = settings.get("provider", "ollama")
+    rprint(f"  [bold white]Provider[/bold white]              : {provider.capitalize()}")
+
+    # 1. API Key check
+    key = settings.get("openrouter_api_key", "")
+    has_key = bool(key and key not in ("YOUR_OPENROUTER_KEY_HERE", "YOUR_KEY"))
+    if has_key:
+        rprint("  [bold white]API Key[/bold white]               : [green]Loaded ✓[/green]")
+    else:
+        rprint("  [bold white]API Key[/bold white]               : [red]Loaded ✗[/red]")
+        rprint("\n[bold red]Stage Failed: API Key not loaded[/bold red]")
+        rprint("Please run 'config ai' or 'auth' to set your OpenRouter API key.")
+        return
+
+    # 2. Configuration check
+    try:
+        valid_cfg = "provider" in settings
+        if valid_cfg:
+            rprint("  [bold white]Configuration[/bold white]         : [green]Valid ✓[/green]")
+        else:
+            raise ValueError("Missing provider key")
+    except Exception as e:
+        rprint(f"  [bold white]Configuration[/bold white]         : [red]Valid ✗ ({e})[/red]")
+        rprint("\n[bold red]Stage Failed: Configuration check[/bold red]")
+        return
+
+    # 3. Authorization Header check
+    auth_header = f"Bearer {key}"
+    has_bearer = auth_header.startswith("Bearer ") and len(auth_header.split()) == 2
+    if has_bearer:
+        rprint("  [bold white]Authorization Header[/bold white]  : [green]Present ✓[/green]")
+    else:
+        rprint("  [bold white]Authorization Header[/bold white]  : [red]Present ✗[/red]")
+        rprint("\n[bold red]Stage Failed: Authorization Header malformed[/bold red]")
+        return
+
+    # 4. Endpoint check
+    endpoint = "https://openrouter.ai/api/v1/chat/completions"
+    try:
+        resp = requests.options(endpoint, timeout=5)
+        rprint("  [bold white]Endpoint[/bold white]              : [green]Valid ✓[/green]")
+    except Exception as e:
+        rprint(f"  [bold white]Endpoint[/bold white]              : [red]Valid ✗ ({e})[/red]")
+        rprint("\n[bold red]Stage Failed: Endpoint connection failed[/bold red]")
+        return
+
+    # 5. Test Request
+    try:
+        headers = {
+            "Authorization": auth_header,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/revanth-kumar-02/Github-Companion",
+            "X-Title": "GitHub Companion"
+        }
+        payload = {
+            "model": "qwen/qwen2.5-coder-32b-instruct",
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1
+        }
+        resp = requests.post(endpoint, json=payload, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            rprint("  [bold white]Test Request[/bold white]          : [green]Passed ✓[/green]")
+        else:
+            rprint(f"  [bold white]Test Request[/bold white]          : [red]Passed ✗ (HTTP {resp.status_code})[/red]")
+            if resp.status_code == 401:
+                rprint("\n[bold red]Stage Failed: Test Request (Unauthorized)[/bold red]")
+                rprint("Your OpenRouter API Key appears to be invalid or expired.")
+            else:
+                err_msg = resp.json().get('error', {}).get('message', 'Unknown error')
+                rprint(f"\n[bold red]Stage Failed: Test Request ({err_msg})[/bold red]")
+            return
+    except Exception as e:
+        rprint(f"  [bold white]Test Request[/bold white]          : [red]Passed ✗ ({e})[/red]")
+        rprint("\n[bold red]Stage Failed: Test Request connection failure[/bold red]")
+        return
+
+    rprint("\n[bold green]  🎉 OpenRouter AI Pipeline is fully functional! [/bold green]\n")
+

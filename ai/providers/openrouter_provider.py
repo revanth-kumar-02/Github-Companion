@@ -77,23 +77,61 @@ class OpenRouterProvider(BaseProvider):
         tools: list[dict] | None = None,
     ) -> Any:
         """Send a chat completion request to OpenRouter."""
+        import os
+        from rich import print as rprint
+
+        # Build authorization and identity headers
+        headers = {
+            "HTTP-Referer": "https://github.com/revanth-kumar-02/Github-Companion",
+            "X-Title":      "GitHub Companion",
+            "Authorization": f"Bearer {self._api_key}",
+        }
+
+        # Print debug information during development
+        if os.environ.get("GC_DEBUG") == "true":
+            masked_key = self._api_key[:6] + "*" * (len(self._api_key) - 6) if len(self._api_key) > 6 else "*" * 8
+            rprint()
+            rprint("[bold yellow]── OpenRouter Debug Info ──[/bold yellow]")
+            rprint(f"  [bold white]Provider[/bold white]      : OpenRouter")
+            rprint(f"  [bold white]Model[/bold white]         : {self._model}")
+            rprint(f"  [bold white]Endpoint[/bold white]      : {self.BASE_URL}/chat/completions")
+            rprint(f"  [bold white]Authorization[/bold white] : Bearer {masked_key}")
+            rprint(f"  [bold white]Configuration[/bold white] : Loaded Successfully")
+            rprint("[bold yellow]──────────────────────────[/bold yellow]")
+            rprint()
+
         kwargs: dict[str, Any] = {
             "model":       self._model,
             "messages":    messages,
             "temperature": 0.2,
             "max_tokens":  2048,
-            # OpenRouter-specific headers for identification
-            "extra_headers": {
-                "HTTP-Referer": "https://github.com/revanth-kumar-02/Github-Companion",
-                "X-Title":      "GitHub Companion",
-            },
+            "extra_headers": headers,
         }
         if tools and self.supports_tools():
             kwargs["tools"]       = tools
             kwargs["tool_choice"] = "auto"
 
-        response = self._client.chat.completions.create(**kwargs)
-        return response.choices[0].message
+        try:
+            response = self._client.chat.completions.create(**kwargs)
+            return response.choices[0].message
+        except Exception as exc:
+            exc_str = str(exc)
+            # If authentication fails or 401 encountered, raise a clear formatted error
+            if "401" in exc_str or "unauthorized" in exc_str.lower() or "authentication" in exc_str.lower():
+                error_msg = """\
+[bold red]OpenRouter authentication failed.[/bold red]
+
+Possible causes:
+ • API key not loaded
+ • Invalid API key
+ • Authorization header missing
+ • Configuration not saved correctly
+"""
+                if os.environ.get("GC_DEBUG") == "true":
+                    error_msg += f"\n[dim]Original response: {exc_str}[/dim]"
+                raise RuntimeError(error_msg)
+            raise
+
 
     def list_models(self) -> list[str]:
         """Return the logical model names available via OpenRouter."""
