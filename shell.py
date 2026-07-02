@@ -1,3 +1,17 @@
+import sys
+
+# Force standard streams to use UTF-8 to prevent CP1252 encoder crashes on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from commands.publish import show_gc_publish
 from utils.ui import header
 from rich.console import Console

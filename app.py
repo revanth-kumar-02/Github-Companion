@@ -1,5 +1,17 @@
 """Entry point for github-companion."""
 import sys
+
+# Force standard streams to use UTF-8 to prevent CP1252 encoder crashes on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 from commands.version import show_gc_version
 from commands.status import show_gc_status
 from commands.help import show_help
