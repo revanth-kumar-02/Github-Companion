@@ -70,3 +70,23 @@ def get_openrouter_api_key() -> str:
             '  "openrouter_api_key": "sk-or-..."'
         )
     return key
+
+
+def save_settings(settings: dict) -> None:
+    """Save the settings dict back to config/settings.json."""
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(settings, f, indent=4)
+
+
+def get_custom_models() -> list[dict]:
+    """Return the list of custom registered models."""
+    return _load().get("custom_models", [])
+
+
+def add_custom_model(model: dict) -> None:
+    """Register a new custom model in the settings config."""
+    settings = _load()
+    if "custom_models" not in settings:
+        settings["custom_models"] = []
+    settings["custom_models"].append(model)
+    save_settings(settings)

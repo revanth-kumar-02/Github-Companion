@@ -87,6 +87,13 @@ def _build_provider(provider_name: str, model_name: str) -> "BaseProvider | None
     Returns None (rather than raising) so the factory can silently try fallback.
     """
     try:
+        # Check custom models first
+        from services.config_service import get_custom_models
+        for custom_cfg in get_custom_models():
+            if custom_cfg.get("model_name") == model_name or custom_cfg.get("provider_name") == provider_name:
+                from ai.providers.custom_provider import CustomProvider
+                return CustomProvider(custom_cfg)
+
         if provider_name == "ollama":
             from ai.providers.ollama_provider import OllamaProvider
             return OllamaProvider(model_name=model_name, host=get_ollama_host())
@@ -106,6 +113,7 @@ def _build_provider(provider_name: str, model_name: str) -> "BaseProvider | None
     except Exception:
         # Swallow all errors during construction so fallback can be tried
         return None
+
 
 
 def _raise_no_provider(primary: str, fallback: str) -> None:

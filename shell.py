@@ -16,6 +16,9 @@ from commands.heatmap import show_gc_heatmap
 from commands.search import gc_search
 from commands.readme import show_gc_readme
 from commands.ai_cmd import start_ai_mode
+from commands.ask import start_ask_mode
+from commands.code import start_code_mode
+from commands.models import show_models_menu
 
 console = Console()
 
@@ -35,7 +38,11 @@ commands = {
     "search": gc_search,
     "readme": show_gc_readme,
     "ai": start_ai_mode,
+    "ask": start_ask_mode,
+    "code": start_code_mode,
+    "models": show_models_menu,
 }
+
 
 def start_shell():
     header()

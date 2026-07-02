@@ -42,11 +42,15 @@ def show_help():
         ("readme",    "Utility",      "Interactively generate a README.md file"),
         # AI Agent
         ("ai",        "AI Agent",     "Enter AI mode — use natural language to take actions"),
+        ("ask",       "AI Agent",     "General AI assistant chatbot (no file edits/commands)"),
+        ("code",      "AI Agent",     "Autonomous AI Coding Agent (planning + generation)"),
+        ("models",    "AI Agent",     "Register and manage custom AI models"),
         # System
         ("version",   "System",       "Show installed Git version"),
         ("status",    "System",       "Show current Git status"),
         ("help",      "System",       "Show this help table"),
         ("exit",      "System",       "Exit the interactive shell"),
+
     ]
 
     for cmd, category, desc in rows:

@@ -208,7 +208,37 @@ TOOL_SCHEMAS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Write or create a file with the specified content (creates directories automatically).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to the file to write"},
+                    "content": {"type": "string", "description": "Full content to write to the file"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_command",
+            "description": "Execute a terminal command locally.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "The command string to execute in the shell"},
+                },
+                "required": ["command"],
+            },
+        },
+    },
 ]
+
 
 
 # ── Tool Executor ──────────────────────────────────────────────────────────────
@@ -388,6 +418,39 @@ def _read_file(args: dict) -> str:
         return f"Error reading file: {exc}"
 
 
+def _write_file(args: dict) -> str:
+    path = args["path"]
+    content = args["content"]
+    try:
+        abs_path = os.path.abspath(path)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Successfully wrote {len(content)} characters to '{path}'"
+    except Exception as exc:
+        return f"Error writing file: {exc}"
+
+
+def _execute_command(args: dict) -> str:
+    cmd = args["command"]
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        output = f"Exit code: {result.returncode}\n"
+        if result.stdout:
+            output += f"STDOUT:\n{result.stdout}\n"
+        if result.stderr:
+            output += f"STDERR:\n{result.stderr}\n"
+        return output
+    except Exception as exc:
+        return f"Error executing command: {exc}"
+
+
 # ── Dispatch table ─────────────────────────────────────────────────────────────
 
 _DISPATCH: dict[str, callable] = {
@@ -402,4 +465,7 @@ _DISPATCH: dict[str, callable] = {
     "git_status":         _git_status,
     "list_directory":     _list_directory,
     "read_file":          _read_file,
+    "write_file":         _write_file,
+    "execute_command":    _execute_command,
 }
+

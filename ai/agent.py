@@ -38,29 +38,33 @@ class Agent:
     every turn (e.g., repeated coding questions reuse the same Ollama connection).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, provider: BaseProvider | None = None) -> None:
         self.memory: ConversationMemory = ConversationMemory()
         self._provider_cache: dict[str, BaseProvider] = {}
+        self.provider = provider
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def run(self, user_input: str) -> None:
+    def run(self, user_input: str, system_prompt: str | None = None, enable_tools: bool = True) -> None:
         """Process a user prompt through the full agent loop."""
 
-        # ── 1. Classify request → pick model ──────────────────────────────────
-        model_type = select_model_type(user_input)
-        try:
-            provider = self._get_provider(model_type)
-        except RuntimeError as exc:
-            rprint(f"\n[bold red]❌ {exc}[/bold red]")
-            return
+        # ── 1. Pick model ─────────────────────────────────────────────────────
+        if self.provider:
+            provider = self.provider
+        else:
+            model_type = select_model_type(user_input)
+            try:
+                provider = self._get_provider(model_type)
+            except RuntimeError as exc:
+                rprint(f"\n[bold red]❌ {exc}[/bold red]")
+                return
 
-        type_label = describe_model_type(model_type)
-        rprint(
-            f"[dim]  {type_label} | "
-            f"{provider.name} / {provider.model} | "
-            f"tools={'yes' if provider.supports_tools() else 'no'}[/dim]"
-        )
+            type_label = describe_model_type(model_type)
+            rprint(
+                f"[dim]  {type_label} | "
+                f"{provider.name} / {provider.model} | "
+                f"tools={'yes' if (provider.supports_tools() and enable_tools) else 'no'}[/dim]"
+            )
 
         # ── 2. Show pre-execution plan for known complex tasks ─────────────────
         plan = get_plan_for(user_input)
@@ -71,16 +75,18 @@ class Agent:
 
         # ── 3. Build messages ──────────────────────────────────────────────────
         context = get_project_context()
+        sys_prompt = system_prompt or SYSTEM_PROMPT
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": sys_prompt},
             {"role": "system", "content": build_context_message(context)},
             *self.memory.get_history(),
             {"role": "user", "content": user_input},
         ]
         self.memory.add_user(user_input)
 
-        # Tools are passed only when the model supports function calling
-        active_tools = TOOL_SCHEMAS if provider.supports_tools() else None
+        # Tools are passed only when the model supports function calling and tools are enabled
+        active_tools = TOOL_SCHEMAS if (provider.supports_tools() and enable_tools) else None
+
 
         # ── 4. Agent loop ──────────────────────────────────────────────────────
         iterations = 0

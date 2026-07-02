@@ -15,6 +15,9 @@ from commands.publish import show_gc_publish
 from commands.search import gc_search
 from commands.readme import show_gc_readme
 from commands.ai_cmd import start_ai_mode
+from commands.ask import start_ask_mode
+from commands.code import start_code_mode
+from commands.models import show_models_menu
 from utils.ui import header
 from shell import start_shell
 
@@ -45,7 +48,11 @@ def main():
         "search": gc_search,
         "readme": show_gc_readme,
         "ai": start_ai_mode,
+        "ask": start_ask_mode,
+        "code": start_code_mode,
+        "models": show_models_menu,
     }
+
 
     if command in commands:
         commands[command]()
