@@ -405,16 +405,21 @@ def _validate_openrouter_key(api_key: str) -> bool:
 
 
 def ensure_openrouter_authenticated() -> str:
-    """Check if OpenRouter key is set, and guide the user through setting it if not."""
+    """Check if OpenRouter key is set and valid, and guide the user through setting it if not."""
     from services.config_service import get_openrouter_api_key, save_settings, _load
     
     key = get_openrouter_api_key()
     if key:
-        return key
+        with console.status("[bold yellow]Validating stored OpenRouter Key...[/bold yellow]", spinner="dots"):
+            valid = _validate_openrouter_key(key)
+        if valid:
+            return key
+        else:
+            rprint("[bold red]⚠️ Stored OpenRouter API Key is invalid or expired.[/bold red]")
 
     rprint()
     rprint("[bold yellow]OpenRouter Configuration[/bold yellow]")
-    rprint("It looks like OpenRouter has not been configured.")
+    rprint("It looks like OpenRouter has not been configured or needs re-authentication.")
     choice = console.input("Would you like to configure it now? (y/n) : ").strip().lower()
     if choice != "y":
         raise RuntimeError("OpenRouter is not configured.")
@@ -438,4 +443,5 @@ def ensure_openrouter_authenticated() -> str:
             return new_key
         else:
             rprint("[bold red]❌ Invalid OpenRouter API Key. Please try again.[/bold red]")
+
 
