@@ -6,13 +6,14 @@ from rich.console import Console
 from rich.panel import Panel
 from rich import print as rprint
 
-from ai.provider import OpenAIProvider
+from ai.provider import get_provider
+from ai.model_selector import select_model_type, describe_model_type
 from ai.tools import TOOL_SCHEMAS, execute_tool
 from ai.memory import ConversationMemory
 from ai.context import get_project_context
 from ai.prompts import SYSTEM_PROMPT, build_context_message
 from ai.planner import is_complex_task, get_plan_for, format_plan
-from services.config_service import get_openai_api_key, get_ai_model
+from ai.providers.base_provider import BaseProvider
 
 console = Console()
 
@@ -22,38 +23,54 @@ MAX_TOOL_ITERATIONS = 10
 
 class Agent:
     """
-    GitHub Companion AI agent powered by OpenAI function calling.
+    GitHub Companion AI agent with automatic model selection.
 
-    Lifecycle:
-      1. Collect project context (cwd, git, file tree).
-      2. Show plan for known complex tasks.
-      3. Build messages: system + context + history + user input.
-      4. Call OpenAI — get back either tool_calls or a text response.
-      5. If tool_calls: execute each tool → append results → loop back to 4.
-      6. When the model returns plain text: display in a Rich panel and save to memory.
+    On every user turn:
+      1. Classify the request → model type (coding / reasoning / assistant).
+      2. Fetch the right provider via the factory (with automatic fallback).
+      3. Show which provider + model is being used.
+      4. Build messages: system prompt + project context + history + user input.
+      5. Call provider.generate() — with tools only if provider.supports_tools().
+      6. If tool_calls returned → execute each → append results → loop.
+      7. When plain text returned → display in Rich panel → save to memory.
+
+    Provider instances are cached by model type so we don't reconnect on
+    every turn (e.g., repeated coding questions reuse the same Ollama connection).
     """
 
-    def __init__(self):
-        api_key = get_openai_api_key()
-        model   = get_ai_model()
-        self.provider = OpenAIProvider(api_key=api_key, model=model)
-        self.memory   = ConversationMemory()
-        rprint(f"[dim]  Model: {model}[/dim]")
+    def __init__(self) -> None:
+        self.memory: ConversationMemory = ConversationMemory()
+        self._provider_cache: dict[str, BaseProvider] = {}
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def run(self, user_input: str) -> None:
         """Process a user prompt through the full agent loop."""
 
-        # Show pre-execution plan for known complex tasks
+        # ── 1. Classify request → pick model ──────────────────────────────────
+        model_type = select_model_type(user_input)
+        try:
+            provider = self._get_provider(model_type)
+        except RuntimeError as exc:
+            rprint(f"\n[bold red]❌ {exc}[/bold red]")
+            return
+
+        type_label = describe_model_type(model_type)
+        rprint(
+            f"[dim]  {type_label} | "
+            f"{provider.name} / {provider.model} | "
+            f"tools={'yes' if provider.supports_tools() else 'no'}[/dim]"
+        )
+
+        # ── 2. Show pre-execution plan for known complex tasks ─────────────────
         plan = get_plan_for(user_input)
         if plan and is_complex_task(user_input):
             rprint("\n[bold blue]  📋 Execution Plan:[/bold blue]")
             rprint(format_plan(plan))
             rprint()
 
-        # Build the initial message list for this turn
-        context  = get_project_context()
+        # ── 3. Build messages ──────────────────────────────────────────────────
+        context = get_project_context()
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "system", "content": build_context_message(context)},
@@ -62,21 +79,22 @@ class Agent:
         ]
         self.memory.add_user(user_input)
 
-        # ── Agent loop ─────────────────────────────────────────────────────────
+        # Tools are passed only when the model supports function calling
+        active_tools = TOOL_SCHEMAS if provider.supports_tools() else None
+
+        # ── 4. Agent loop ──────────────────────────────────────────────────────
         iterations = 0
 
         while iterations < MAX_TOOL_ITERATIONS:
             iterations += 1
 
-            # Call the LLM
             with console.status("[bold yellow]  Thinking...[/bold yellow]", spinner="dots"):
-                response = self.provider.chat(messages, TOOL_SCHEMAS)
+                response = provider.generate(messages, tools=active_tools)
 
             # ── Tool calls ─────────────────────────────────────────────────────
-            if response.tool_calls:
-                # Append the assistant message (with tool_calls) to the conversation
+            if active_tools and response.tool_calls:
                 messages.append({
-                    "role": "assistant",
+                    "role":    "assistant",
                     "content": response.content or "",
                     "tool_calls": [
                         {
@@ -91,7 +109,6 @@ class Agent:
                     ],
                 })
 
-                # Execute each tool and collect results
                 for tool_call in response.tool_calls:
                     tool_name = tool_call.function.name
                     try:
@@ -99,7 +116,6 @@ class Agent:
                     except json.JSONDecodeError:
                         tool_args = {}
 
-                    # Show what tool is being called
                     arg_preview = _format_args(tool_args)
                     rprint(
                         f"[dim]  ⚙  Running[/dim] [bold cyan]{tool_name}[/bold cyan]"
@@ -114,14 +130,13 @@ class Agent:
 
                     rprint(f"[dim]  ✔  {tool_name} done[/dim]")
 
-                    # Append tool result to messages
                     messages.append({
                         "role":         "tool",
                         "tool_call_id": tool_call.id,
                         "content":      result,
                     })
 
-                continue  # Send results back to the LLM for the next step
+                continue  # Feed results back to the LLM
 
             # ── Final text response ────────────────────────────────────────────
             final_text = (response.content or "").strip()
@@ -129,7 +144,7 @@ class Agent:
                 rprint()
                 console.print(Panel(
                     final_text,
-                    title="[bold purple]🤖 GitHub Companion AI[/bold purple]",
+                    title=f"[bold purple]🤖 {provider.name.capitalize()} / {provider.model}[/bold purple]",
                     border_style="purple",
                     padding=(1, 2),
                 ))
@@ -138,6 +153,14 @@ class Agent:
 
         else:
             rprint("[bold red]  ⚠  Agent reached the maximum tool call limit.[/bold red]")
+
+    # ── Private ────────────────────────────────────────────────────────────────
+
+    def _get_provider(self, model_type: str) -> BaseProvider:
+        """Return a cached provider for the given model type, creating if needed."""
+        if model_type not in self._provider_cache:
+            self._provider_cache[model_type] = get_provider(model_type)
+        return self._provider_cache[model_type]
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
