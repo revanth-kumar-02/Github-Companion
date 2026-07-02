@@ -603,7 +603,13 @@ def _display_plan(plan: dict) -> None:
     deps_table.add_column("Type", style="bold green")
     deps_table.add_column("Purpose/Reason", style="white")
     for dep in plan.get("dependencies", []):
-        deps_table.add_row(dep.get("name", ""), dep.get("type", ""), dep.get("reason", ""))
+        if isinstance(dep, dict):
+            name = dep.get("name") or dep.get("package") or dep.get("library") or ""
+            dep_type = dep.get("type") or dep.get("purpose") or "Library"
+            reason = dep.get("reason") or dep.get("purpose") or "Required dependency"
+            deps_table.add_row(name, dep_type, reason)
+        elif isinstance(dep, str):
+            deps_table.add_row(dep, "Library", "Required dependency")
     console.print(Panel(deps_table, title="[bold purple]7. DEPENDENCIES[/bold purple]", border_style="purple"))
     rprint()
 
@@ -718,8 +724,8 @@ Write the COMPLETE, production-ready, high-quality, fully functional source code
 
 def _detect_project_type(plan: dict) -> str:
     """Heuristically identify the project type from plan fields."""
-    deps = [d.lower() for d in plan.get("dependencies", [])]
-    files = [f.lower() for f in plan.get("files", [])]
+    deps = normalize_dependencies(plan.get("dependencies", []))
+    files = [str(f).lower() for f in plan.get("files", []) if f]
 
     if any(x in files for x in ("requirements.txt", "pipfile", "pyproject.toml")):
         return "python"
@@ -812,6 +818,11 @@ go.work
 
 def _get_readme_template(plan: dict) -> str:
     """Return initial markdown README.md template compiled from plan."""
+    features_list = plan.get('features', [])
+    features_str = ""
+    if isinstance(features_list, list):
+        features_str = "\n".join(f'- {feat}' for feat in features_list if feat)
+
     return f"""# {plan.get('project_name', 'Unnamed Project')}
 
 {plan.get('strategy', 'No description provided.')}
@@ -819,7 +830,7 @@ def _get_readme_template(plan: dict) -> str:
 ---
 
 ## ✨ Features
-{chr(10).join(f'- {feat}' for feat in plan.get('features', []))}
+{features_str}
 
 ---
 
@@ -837,7 +848,7 @@ def _get_readme_template(plan: dict) -> str:
 ---
 
 ## 🛠️ Dependencies
-{chr(10).join(f'- {dep}' for dep in plan.get('dependencies', []))}
+{_format_readme_dependencies(plan.get('dependencies', []))}
 
 ---
 
@@ -875,14 +886,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 def _get_dependency_file(proj_type: str, plan: dict) -> tuple[str | None, str]:
     """Return dependency filename and package content depending on type."""
-    deps_raw = plan.get("dependencies", [])
-    deps = []
-    for d in deps_raw:
-        if isinstance(d, dict):
-            deps.append(d.get("name", ""))
-        else:
-            deps.append(str(d))
-    deps = [d for d in deps if d]
+    deps = normalize_dependencies(plan.get("dependencies", []))
 
     if proj_type == "python":
         return "requirements.txt", "\n".join(deps) + "\n"
@@ -1087,5 +1091,45 @@ def _clean_project_folder_name(title: str) -> str:
     cleaned = re.sub(r'[^a-z0-9\s\-]', '', cleaned)
     cleaned = re.sub(r'[\s\-]+', '-', cleaned)
     return cleaned.strip('-')
+
+
+def normalize_dependencies(dependencies: list) -> list[str]:
+    """Normalize untrusted AI-generated dependency listings into standard lowercase list[str]."""
+    if not isinstance(dependencies, list):
+        return []
+    
+    normalized = []
+    for dep in dependencies:
+        if not dep:
+            continue
+        if isinstance(dep, str):
+            normalized.append(dep.strip().lower())
+        elif isinstance(dep, dict):
+            name = dep.get("name") or dep.get("package") or dep.get("library")
+            if name and isinstance(name, str):
+                normalized.append(name.strip().lower())
+    return normalized
+
+
+def _format_readme_dependencies(dependencies: list) -> str:
+    """Format dependency listings cleanly for README.md display."""
+    if not isinstance(dependencies, list):
+        return ""
+    lines = []
+    for dep in dependencies:
+        if not dep:
+            continue
+        if isinstance(dep, str):
+            lines.append(f"- {dep}")
+        elif isinstance(dep, dict):
+            name = dep.get("name") or dep.get("package") or dep.get("library") or ""
+            purpose = dep.get("purpose") or dep.get("reason") or dep.get("type") or ""
+            if name:
+                if purpose:
+                    lines.append(f"- {name} ({purpose})")
+                else:
+                    lines.append(f"- {name}")
+    return "\n".join(lines)
+
 
 
