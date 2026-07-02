@@ -57,16 +57,23 @@ def show_models_menu() -> None:
         rprint("  [bold cyan]1[/bold cyan]. Add Custom Model")
         if customs:
             rprint("  [bold cyan]2[/bold cyan]. Delete a Custom Model")
-        rprint("  [bold cyan]3[/bold cyan]. Back to GC shell")
+            rprint("  [bold cyan]3[/bold cyan]. Back to GC shell")
+        else:
+            rprint("  [bold cyan]2[/bold cyan]. Back to GC shell")
         rprint()
 
         choice = console.input("[bold yellow]Choose option : [/bold yellow]").strip()
 
         if choice == "1":
             _register_custom_model()
-        elif choice == "2" and customs:
-            _delete_custom_model(customs)
-        elif choice == "3" or choice.lower() in ("exit", "back"):
+        elif choice == "2":
+            if customs:
+                _delete_custom_model(customs)
+            else:
+                break
+        elif choice == "3" and customs:
+            break
+        elif choice.lower() in ("exit", "back"):
             break
         else:
             error("Invalid choice.")
