@@ -158,10 +158,33 @@ class OpenRouterProvider(BaseProvider):
             rprint("====================================================")
             rprint()
 
-        try:
-            resp = requests.post(endpoint, json=payload, headers=headers, timeout=60)
-        except Exception as exc:
-            raise RuntimeError(f"OpenRouter request failed: {exc}")
+        import time
+        max_retries = 3
+        backoff = 2
+        resp = None
+        for attempt in range(max_retries):
+            try:
+                resp = requests.post(endpoint, json=payload, headers=headers, timeout=60)
+                if resp.status_code == 429:
+                    rprint(f"[bold yellow]  ⚠  Rate limit hit. Retrying in {backoff}s...[/bold yellow]")
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+                if resp.status_code in (502, 503, 504):
+                    rprint(f"[bold yellow]  ⚠  Server error ({resp.status_code}). Retrying in {backoff}s...[/bold yellow]")
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+                break
+            except Exception as exc:
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"OpenRouter request failed: {exc}")
+                rprint(f"[bold yellow]  ⚠  Connection error. Retrying in {backoff}s...[/bold yellow]")
+                time.sleep(backoff)
+                backoff *= 2
+
+        if resp is None:
+            raise RuntimeError("OpenRouter request failed with empty response.")
 
         if debug_mode:
             rprint("====================================================")

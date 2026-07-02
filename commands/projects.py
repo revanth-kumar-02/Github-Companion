@@ -132,12 +132,13 @@ def _project_actions_menu(workspace_path: str, project_name: str) -> None:
                 try:
                     if entry.endswith(".py"):
                         if platform.system() == "Windows":
-                            subprocess.Popen(["start", "cmd", "/k", f"{platform.sys.executable} {entry}"], cwd=project_path, shell=True)
+                            py_path = f'"{platform.sys.executable}"'
+                            subprocess.Popen(["start", "cmd", "/k", f'{py_path} "{entry}"'], cwd=project_path, shell=True)
                         else:
                             subprocess.Popen([platform.sys.executable, entry], cwd=project_path)
                     elif entry.endswith(".js"):
                         if platform.system() == "Windows":
-                            subprocess.Popen(["start", "cmd", "/k", f"node {entry}"], cwd=project_path, shell=True)
+                            subprocess.Popen(["start", "cmd", "/k", f'node "{entry}"'], cwd=project_path, shell=True)
                         else:
                             subprocess.Popen(["node", entry], cwd=project_path)
                     success("Project run command launched in a separate window.")

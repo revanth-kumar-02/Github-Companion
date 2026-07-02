@@ -1,9 +1,13 @@
 import json
 import os
+import threading
 from pathlib import Path
 
 GC_DIR = Path.home() / ".gc"
 CONFIG_PATH = GC_DIR / "config.json"
+
+_config_lock = threading.Lock()
+
 
 
 def is_configured() -> bool:
@@ -25,30 +29,31 @@ def ensure_gc_directories() -> None:
 
 def _load() -> dict:
     """Load config.json and return the dict."""
-    if not CONFIG_PATH.exists():
-        return {}
-    with open(CONFIG_PATH, "r") as f:
-        try:
-            data = json.load(f)
-            import os
-            from rich import print as rprint
-            debug_mode = (
-                os.environ.get("DEBUG") == "True"
-                or os.environ.get("GC_DEBUG") == "true"
-            )
-            if debug_mode:
-                or_detected = bool(data.get("openrouter_api_key"))
-                nv_detected = bool(data.get("nvidia_api_key"))
-                gh_detected = bool(data.get("github_token"))
-                rprint()
-                rprint("Config loaded successfully")
-                rprint(f"OpenRouter key detected: {or_detected}")
-                rprint(f"NVIDIA NIM key detected: {nv_detected}")
-                rprint(f"GitHub token detected: {gh_detected}")
-                rprint()
-            return data
-        except Exception:
+    with _config_lock:
+        if not CONFIG_PATH.exists():
             return {}
+        with open(CONFIG_PATH, "r") as f:
+            try:
+                data = json.load(f)
+                import os
+                from rich import print as rprint
+                debug_mode = (
+                    os.environ.get("DEBUG") == "True"
+                    or os.environ.get("GC_DEBUG") == "true"
+                )
+                if debug_mode:
+                    or_detected = bool(data.get("openrouter_api_key"))
+                    nv_detected = bool(data.get("nvidia_api_key"))
+                    gh_detected = bool(data.get("github_token"))
+                    rprint()
+                    rprint("Config loaded successfully")
+                    rprint(f"OpenRouter key detected: {or_detected}")
+                    rprint(f"NVIDIA NIM key detected: {nv_detected}")
+                    rprint(f"GitHub token detected: {gh_detected}")
+                    rprint()
+                return data
+            except Exception:
+                return {}
 
 
 # ── GitHub ─────────────────────────────────────────────────────────────────────
@@ -117,9 +122,10 @@ def get_nvidia_api_key() -> str:
 
 def save_settings(settings: dict) -> None:
     """Save the settings dict back to config.json."""
-    ensure_gc_directories()
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(settings, f, indent=4)
+    with _config_lock:
+        ensure_gc_directories()
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(settings, f, indent=4)
 
     import os
     from rich import print as rprint
