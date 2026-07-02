@@ -1,10 +1,15 @@
-"""First-run setup wizard for GitHub Companion."""
+"""First-run setup wizard for GitHub Companion with redesigned Rich UI."""
 import json
 import os
+import sys
 from pathlib import Path
 import requests
+
 from rich.console import Console
 from rich.panel import Panel
+from rich.align import Align
+from rich.rule import Rule
+from rich.text import Text
 from rich import print as rprint
 
 from services.config_service import CONFIG_PATH, save_settings, ensure_gc_directories
@@ -12,153 +17,302 @@ from services.config_service import CONFIG_PATH, save_settings, ensure_gc_direct
 console = Console()
 
 
-def run_setup_wizard() -> bool:
+def get_masked_input(prompt: str) -> str:
     """
-    Run the interactive first-run setup wizard.
-    Returns True if successfully configured and saved, False otherwise.
+    Read character input while masking it with '*' stars.
+    Cross-platform (Windows & Unix tty), copy-paste friendly.
     """
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+
+    if os.name == "nt":
+        import msvcrt
+        password = []
+        while True:
+            ch_bytes = msvcrt.getch()
+            # Handle special or extended key sequences (arrow keys etc.)
+            if ch_bytes in (b'\x00', b'\xe0'):
+                if msvcrt.kbhit():
+                    msvcrt.getch()
+                continue
+                
+            try:
+                ch = ch_bytes.decode("utf-8", errors="ignore")
+            except Exception:
+                continue
+
+            # Ctrl+C
+            if ch == "\x03":
+                raise KeyboardInterrupt()
+
+            # Enter
+            if ch in ("\r", "\n"):
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                break
+
+            # Backspace
+            elif ch in ("\b", "\x08"):
+                if len(password) > 0:
+                    password.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+            else:
+                # Standard printable ASCII characters
+                if ch_bytes[0] >= 32 and ch_bytes[0] != 224:
+                    password.append(ch)
+                    sys.stdout.write("*")
+                    sys.stdout.flush()
+        return "".join(password)
+    else:
+        try:
+            import tty
+            import termios
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            password = []
+            try:
+                tty.setraw(fd)
+                while True:
+                    ch = sys.stdin.read(1)
+                    if ch in ("\r", "\n"):
+                        sys.stdout.write("\n\r")
+                        sys.stdout.flush()
+                        break
+                    elif ch in ("\x7f", "\x08"):
+                        if len(password) > 0:
+                            password.pop()
+                            sys.stdout.write("\b \b")
+                            sys.stdout.flush()
+                    elif ch == "\x03":
+                        raise KeyboardInterrupt()
+                    else:
+                        password.append(ch)
+                        sys.stdout.write("*")
+                        sys.stdout.flush()
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            return "".join(password).strip()
+        except ImportError:
+            # Fallback to getpass if tty/termios is unavailable
+            import getpass
+            res = getpass.getpass("")
+            sys.stdout.write("*" * len(res) + "\n")
+            sys.stdout.flush()
+            return res
+
+
+def print_step_header(step: int, total_steps: int, title: str) -> None:
+    """Clear terminal and render a standard step header using Rich components."""
+    console.clear()
     rprint()
-    console.print(Panel(
-        "[bold purple]Welcome to GitHub Companion 🚀[/bold purple]\n\n"
-        "It looks like this is your first time using GitHub Companion.\n"
-        "Let's configure your development environment.",
-        title="[bold purple]Setup Wizard[/bold purple]",
+    console.print(Rule(title="[bold purple]GitHub Companion Setup[/bold purple]", style="purple"))
+    
+    progress_bar = "■" * step + "□" * (total_steps - step)
+    header_text = Text()
+    header_text.append(f"Step {step} of {total_steps}  |  ", style="bold white")
+    header_text.append(progress_bar, style="magenta")
+    header_text.append(f"\n{title}\n", style="bold cyan")
+    
+    console.print(Align.center(header_text))
+    console.print(Rule(style="purple"))
+    rprint()
+
+
+def run_setup_wizard() -> bool:
+    """Run the interactive setup wizard."""
+    # ── Welcome Screen ─────────────────────────────────────────────────────────
+    console.clear()
+    rprint()
+    
+    welcome_text = Text()
+    welcome_text.append("GitHub Companion 🚀\n\n", style="bold purple")
+    welcome_text.append("First Time Setup\n\n", style="bold white")
+    welcome_text.append("Welcome to GitHub Companion.\n", style="white")
+    welcome_text.append("Let's configure your development\n", style="white")
+    welcome_text.append("environment before getting started.", style="white")
+    
+    panel = Panel(
+        Align.center(welcome_text),
         border_style="purple",
-        padding=(1, 2),
-    ))
+        expand=False,
+        padding=(1, 4)
+    )
+    console.print(Align.center(panel))
     rprint()
     console.input("[bold yellow]Press Enter to continue...[/bold yellow]")
 
-    # ── STEP 1 & 2: GitHub Configuration ───────────────────────────────────────
+    # ── STEP 1: GitHub Configuration ───────────────────────────────────────────
     github_username = ""
     github_token = ""
+    
     while True:
-        rprint()
-        rprint("[bold cyan]STEP 1: GitHub Configuration[/bold cyan]")
-        rprint("[dim]───────────────────────────────────────────────[/dim]")
-        github_username = console.input("[bold white]  GitHub Username             : [/bold white]").strip()
-        # Input password hides typing automatically
-        github_token = console.input("[bold white]  GitHub Personal Access Token : [/bold white]").strip()
-
+        print_step_header(1, 3, "GitHub Configuration")
+        
+        rprint("[bold white]GitHub Username[/bold white]")
+        github_username = console.input("[bold purple]> [/bold purple]").strip()
+        
+        rprint("\n[bold white]GitHub Personal Access Token[/bold white]")
+        github_token = get_masked_input("> ")
+        
         if not github_username or not github_token:
-            rprint("[bold red]❌ Username and Token are required.[/bold red]")
+            rprint("\n[bold red]❌ Username and Token are required.[/bold red]")
+            console.input("\nPress Enter to try again...")
             continue
 
-        # ── STEP 3: Validate Credentials ──────────────────────────────────────
-        with console.status("[bold yellow]  Validating GitHub credentials...[/bold yellow]", spinner="dots"):
+        with console.status("[bold yellow]Validating GitHub credentials...[/bold yellow]", spinner="dots"):
             valid, msg = _validate_github_credentials(github_username, github_token)
 
         if valid:
-            rprint("[bold green]  ✓ GitHub Username exists[/bold green]")
-            rprint("[bold green]  ✓ GitHub Personal Access Token is valid[/bold green]")
-            rprint("[bold green]  ✓ GitHub API is reachable[/bold green]")
+            rprint("\n[bold green]✓ Credentials validated successfully.[/bold green]")
+            console.input("\nPress Enter to continue...")
             break
         else:
-            rprint(f"[bold red]  ❌ Validation failed: {msg}[/bold red]")
-            retry = console.input("[bold yellow]Would you like to try again? (y/n) : [/bold yellow]").strip().lower()
+            rprint(f"\n[bold red]❌ Validation failed: {msg}[/bold red]")
+            retry = console.input("\n[bold yellow]Would you like to try again? (y/n) : [/bold yellow]").strip().lower()
             if retry != "y":
                 return False
 
-    # ── STEP 4: AI Configuration ───────────────────────────────────────────────
-    rprint()
-    rprint("[bold cyan]STEP 4: AI Configuration[/bold cyan]")
-    rprint("[dim]───────────────────────────────────────────────[/dim]")
-    rprint("  Choose an AI Provider:")
-    rprint("    [bold cyan]1[/bold cyan]. Ollama (Recommended) [dim]- Local, Offline, Free[/dim]")
-    rprint("    [bold cyan]2[/bold cyan]. OpenRouter           [dim]- Cloud AI models[/dim]")
-    rprint("    [bold cyan]3[/bold cyan]. Skip for Now")
-    rprint()
-
+    # ── STEP 2: AI Provider Selection ──────────────────────────────────────────
     provider = "ollama"
     openrouter_key = ""
     ollama_host = "http://localhost:11434"
-
+    
     while True:
-        choice = console.input("[bold yellow]Select option (1/2/3) : [/bold yellow]").strip()
+        print_step_header(2, 3, "AI Provider Selection")
+        
+        rprint("Choose an AI Provider:\n")
+        rprint("  [bold cyan][1][/bold cyan] Ollama (Recommended)")
+        rprint("      Offline - No API Key Required\n")
+        rprint("  [bold cyan][2][/bold cyan] OpenRouter")
+        rprint("      Cloud AI Models\n")
+        rprint("  [bold cyan][3][/bold cyan] Skip for Now\n")
+        
+        choice = console.input("[bold purple]> [/bold purple]").strip()
+        
         if choice == "1":
             provider = "ollama"
-            # Detect Ollama
-            with console.status("[bold yellow]  Detecting local Ollama...[/bold yellow]", spinner="dots"):
-                ollama_detected = _detect_ollama(ollama_host)
-            if ollama_detected:
-                rprint("[bold green]  ✓ Ollama Detected[/bold green]")
+            rprint("\n[bold yellow]Detecting local Ollama...[/bold yellow]")
+            if _detect_ollama(ollama_host):
+                rprint("[bold green]✓ Ollama Detected[/bold green]")
             else:
-                rprint("[bold yellow]  ⚠️ Ollama is not running or not installed.[/bold yellow]")
-                rprint("[dim]  You can download and run it later from https://ollama.com[/dim]")
+                rprint("[bold yellow]⚠️ Ollama is not running or not installed.[/bold yellow]")
+                rprint("You can download and run it later from https://ollama.com")
+            console.input("\nPress Enter to continue...")
             break
+            
         elif choice == "2":
             provider = "openrouter"
-            while True:
-                openrouter_key = console.input("[bold white]  OpenRouter API Key : [/bold white]").strip()
+            key_valid = False
+            while not key_valid:
+                rprint("\n[bold white]OpenRouter API Key[/bold white]")
+                openrouter_key = get_masked_input("> ")
                 if not openrouter_key:
                     rprint("[bold red]❌ API Key is required for OpenRouter.[/bold red]")
                     continue
-                with console.status("[bold yellow]  Validating OpenRouter key...[/bold yellow]", spinner="dots"):
+                    
+                with console.status("[bold yellow]Validating OpenRouter key...[/bold yellow]", spinner="dots"):
                     valid_key = _validate_openrouter_key(openrouter_key)
+                    
                 if valid_key:
-                    rprint("[bold green]  ✓ OpenRouter API Key is valid[/bold green]")
-                    break
+                    rprint("[bold green]✓ OpenRouter API Key is valid[/bold green]")
+                    key_valid = True
+                    console.input("\nPress Enter to continue...")
                 else:
-                    rprint("[bold red]  ❌ Invalid OpenRouter API Key.[/bold red]")
-                    retry_key = console.input("[bold yellow]Try key again? (y/n) : [/bold yellow]").strip().lower()
+                    rprint("[bold red]❌ Invalid OpenRouter API Key.[/bold red]")
+                    retry_key = console.input("\nTry key again? (y/n) : ").strip().lower()
                     if retry_key != "y":
-                        provider = "ollama"  # Fallback
+                        provider = "ollama"  # Fallback to Ollama
                         break
             break
+            
         elif choice == "3":
-            provider = "ollama"  # Default skip setting
-            rprint("[dim]  Skipping AI setup. Defaulting to Ollama configuration.[/dim]")
+            provider = "ollama"
+            rprint("\n[dim]AI setup skipped. Defaulting to Ollama.[/dim]")
+            console.input("\nPress Enter to continue...")
             break
         else:
-            rprint("[bold red]❌ Invalid choice.[/bold red]")
+            rprint("[bold red]❌ Invalid choice. Select 1, 2, or 3.[/bold red]")
+            console.input("\nPress Enter to try again...")
 
-    # ── STEP 5: Default AI Model ───────────────────────────────────────────────
+    # ── STEP 3: Default AI Model Selection ─────────────────────────────────────
     coding_model = "qwen2.5-coder"
     reasoning_model = "deepseek-r1"
     assistant_model = "llama3.3"
-
+    
+    print_step_header(3, 3, "Default AI Model Selection")
+    
     if provider == "ollama":
-        rprint()
-        rprint("[bold cyan]STEP 5: Default AI Model[/bold cyan]")
-        rprint("[dim]───────────────────────────────────────────────[/dim]")
-        rprint("  Choose Default Coding Model:")
-        rprint("    [bold cyan]1[/bold cyan]. Qwen 2.5 Coder ⭐ [dim]Recommended[/dim]")
-        rprint("    [bold cyan]2[/bold cyan]. DeepSeek R1")
-        rprint("    [bold cyan]3[/bold cyan]. Llama 3.3")
-        rprint()
-        model_choice = console.input("[bold yellow]Select model (1/2/3) : [/bold yellow]").strip()
-        if model_choice == "2":
-            coding_model = "deepseek-r1"
-        elif model_choice == "3":
-            coding_model = "llama3.3"
+        rprint("Choose Default Coding Model:\n")
+        rprint("  [bold cyan][1][/bold cyan] Qwen 2.5 Coder ⭐ Recommended")
+        rprint("  [bold cyan][2][/bold cyan] DeepSeek R1")
+        rprint("  [bold cyan][3][/bold cyan] Llama 3.3\n")
+        
+        while True:
+            model_choice = console.input("[bold purple]> [/bold purple]").strip()
+            if model_choice == "1":
+                coding_model = "qwen2.5-coder"
+                break
+            elif model_choice == "2":
+                coding_model = "deepseek-r1"
+                break
+            elif model_choice == "3":
+                coding_model = "llama3.3"
+                break
+            else:
+                rprint("[bold red]❌ Invalid choice. Select 1, 2, or 3.[/bold red]")
     else:
-        # OpenRouter default assignments
-        coding_model = "qwen2.5-coder"
-        reasoning_model = "deepseek-r1"
-        assistant_model = "deepseek-v3"
+        # OpenRouter configurations
+        rprint("Choose Default Coding Model:\n")
+        rprint("  [bold cyan][1][/bold cyan] Qwen 2.5 Coder ⭐ Recommended")
+        rprint("  [bold cyan][2][/bold cyan] DeepSeek V3")
+        rprint("  [bold cyan][3][/bold cyan] DeepSeek R1")
+        rprint("  [bold cyan][4][/bold cyan] Llama 3.3\n")
+        
+        while True:
+            model_choice = console.input("[bold purple]> [/bold purple]").strip()
+            if model_choice == "1":
+                coding_model = "qwen2.5-coder"
+                assistant_model = "deepseek-v3"
+                break
+            elif model_choice == "2":
+                coding_model = "deepseek-v3"
+                assistant_model = "deepseek-v3"
+                break
+            elif model_choice == "3":
+                coding_model = "deepseek-r1"
+                assistant_model = "deepseek-v3"
+                break
+            elif model_choice == "4":
+                coding_model = "llama3.3"
+                assistant_model = "deepseek-v3"
+                break
+            else:
+                rprint("[bold red]❌ Invalid choice. Select 1, 2, 3, or 4.[/bold red]")
+                
+    console.input("\nPress Enter to view configuration summary...")
 
-    # ── STEP 6: Configuration Summary ──────────────────────────────────────────
+    # ── Summary Screen ─────────────────────────────────────────────────────────
+    console.clear()
     rprint()
-    summary = (
-        f"[bold yellow]GitHub Configuration[/bold yellow]\n"
-        f"  Username       : {github_username}\n\n"
-        f"[bold yellow]AI Configuration[/bold yellow]\n"
-        f"  AI Provider    : {provider.capitalize()}\n"
-        f"  Coding Model   : {coding_model}\n"
-        f"  Reasoning Model: {reasoning_model}\n"
-        f"  Assistant Model: {assistant_model}\n\n"
-        f"[bold yellow]File Location[/bold yellow]\n"
-        f"  Configuration  : {CONFIG_PATH}"
-    )
-
-    console.print(Panel(
-        summary,
-        title="[bold green]📋 Configuration Summary[/bold green]",
+    
+    summary_text = Text()
+    summary_text.append("Configuration Summary\n\n", style="bold yellow")
+    summary_text.append(f"GitHub Username : {github_username}\n", style="white")
+    summary_text.append(f"AI Provider     : {provider.capitalize()}\n", style="white")
+    summary_text.append(f"Coding Model    : {coding_model}\n", style="white")
+    summary_text.append(f"Config Location : {CONFIG_PATH}\n", style="dim")
+    
+    panel_sum = Panel(
+        Align.center(summary_text),
+        title="[bold green]📋 Setup Summary[/bold green]",
         border_style="green",
         expand=False,
-    ))
+        padding=(1, 4)
+    )
+    console.print(Align.center(panel_sum))
     rprint()
-
+    
     save_choice = console.input("[bold yellow]Save configuration? (y/n) : [/bold yellow]").strip().lower()
     if save_choice != "y":
         rprint("[bold red]❌ Configuration cancelled.[/bold red]")
@@ -181,14 +335,32 @@ def run_setup_wizard() -> bool:
     try:
         ensure_gc_directories()
         save_settings(settings)
-        rprint("\n[bold green]✓ Configuration Saved[/bold green]")
-        rprint("[bold green]✓ GitHub Companion is Ready[/bold green]")
-        rprint("[bold purple]Happy Coding 🚀[/bold purple]\n")
+        
+        # Success Screen
+        console.clear()
+        rprint()
+        
+        success_text = Text()
+        success_text.append("Configuration Saved ✓\n\n", style="bold green")
+        success_text.append("GitHub Companion is ready to use.\n\n", style="white")
+        success_text.append("Happy Coding 🚀", style="bold purple")
+        
+        panel_ok = Panel(
+            Align.center(success_text),
+            border_style="green",
+            expand=False,
+            padding=(1, 4)
+        )
+        console.print(Align.center(panel_ok))
+        rprint()
+        console.input("[bold yellow]Press Enter to launch shell...[/bold yellow]")
         return True
     except Exception as e:
         rprint(f"[bold red]❌ Failed to save configuration: {e}[/bold red]")
         return False
 
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _validate_github_credentials(username: str, token: str) -> tuple[bool, str]:
     """Verify username exists, token is valid, and GitHub API is reachable."""
