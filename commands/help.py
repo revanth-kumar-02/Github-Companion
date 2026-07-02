@@ -45,6 +45,9 @@ def show_help():
         ("ask",       "AI Agent",     "General AI assistant chatbot (no file edits/commands)"),
         ("code",      "AI Agent",     "Autonomous AI Coding Agent (planning + generation)"),
         ("models",    "AI Agent",     "Register and manage custom AI models"),
+        # Workspace
+        ("workspace", "Workspace",    "Manage default GC-Projects workspace location"),
+        ("projects",  "Workspace",    "Manage and run generated projects in GC-Projects"),
         # System
         ("auth",      "System",       "Manage GitHub and OpenRouter authentication credentials"),
         ("login",     "System",       "Reconfigure GitHub credentials"),

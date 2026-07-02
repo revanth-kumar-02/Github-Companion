@@ -171,46 +171,62 @@ def start_code_mode() -> None:
 
     # ── Project Bootstrap Phase ─────────────────────────────────────────────────
     rprint()
-    project_name = plan.get("project_name", "my-project").replace(" ", "-").lower()
+    project_name = plan.get("project_name", "my-project")
+    original_folder_name = _clean_project_folder_name(project_name)
+    folder_name = original_folder_name
 
     from services.config_service import get_default_workspace
-    default_ws = get_default_workspace()
+    workspace_path = get_default_workspace()
+    if not workspace_path:
+        home = os.path.expanduser("~")
+        workspace_path = os.path.join(home, "GC-Projects")
+        os.makedirs(workspace_path, exist_ok=True)
 
-    rprint("[bold bright_white]Project Location Configuration[/bold bright_white]")
+    project_path = os.path.join(workspace_path, folder_name)
+
+    if os.path.exists(project_path):
+        rprint()
+        rprint(f"[bold yellow]⚠ Project folder already exists:[/bold yellow] [cyan]{folder_name}[/cyan]")
+        rprint("[bold white]Options:[/bold white]")
+        rprint("  [bold cyan]1[/bold cyan]. Overwrite existing project")
+        rprint("  [bold cyan]2[/bold cyan]. Create suffix version (e.g. {folder_name}-2)")
+        rprint("  [bold cyan]3[/bold cyan]. Rename project folder")
+        rprint("  [bold cyan]4[/bold cyan]. Cancel build")
+        rprint()
+        
+        conflict_choice = console.input("[bold yellow]Select option (1-4) : [/bold yellow]").strip()
+        
+        if conflict_choice == "1":
+            rprint("[bold red]⚠ Overwriting existing files...[/bold red]")
+        elif conflict_choice == "2":
+            idx = 2
+            while True:
+                candidate = f"{original_folder_name}-{idx}"
+                if not os.path.exists(os.path.join(workspace_path, candidate)):
+                    folder_name = candidate
+                    break
+                idx += 1
+            project_path = os.path.join(workspace_path, folder_name)
+            rprint(f"[bold green]✓ Created suffix version: {folder_name}[/bold green]")
+        elif conflict_choice == "3":
+            new_name = console.input("\nEnter new project folder name: ").strip()
+            if new_name:
+                folder_name = _clean_project_folder_name(new_name)
+                project_path = os.path.join(workspace_path, folder_name)
+            else:
+                rprint("[bold red]❌ Invalid name. Cancelling build.[/bold red]")
+                return
+        else:
+            rprint("[dim]  Build cancelled.[/dim]")
+            return
+
+    rprint()
+    rprint("[bold bright_white]Project Location Display[/bold bright_white]")
     rprint("[blue]" + "─" * 47 + "[/blue]")
-    if default_ws:
-        rprint(f"Default Workspace: [cyan]{default_ws}[/cyan]")
-        use_default = console.input(f"Use default workspace? (y/n) [default: y] : ").strip().lower()
-        if use_default in ("", "y", "yes"):
-            parent_dir = default_ws
-        else:
-            parent_dir = console.input("Enter parent directory path: ").strip()
-    else:
-        parent_dir = console.input("Enter parent directory path [default: current folder] : ").strip()
-
-    if not parent_dir:
-        parent_dir = os.getcwd()
-
-    parent_dir = os.path.abspath(os.path.expanduser(parent_dir))
-    project_path = os.path.join(parent_dir, project_name)
-
-    if not os.path.exists(parent_dir):
-        rprint(f"[bold yellow]Directory '{parent_dir}' does not exist.[/bold yellow]")
-        create_parent = console.input("Create it? (y/n) : ").strip().lower()
-        if create_parent in ("y", "yes"):
-            try:
-                os.makedirs(parent_dir, exist_ok=True)
-            except Exception as e:
-                error(f"Failed to create directory: {e}. Defaulting to current working directory.")
-                parent_dir = os.getcwd()
-                project_path = os.path.join(parent_dir, project_name)
-        else:
-            rprint("[dim]Defaulting to current working directory.[/dim]")
-            parent_dir = os.getcwd()
-            project_path = os.path.join(parent_dir, project_name)
-
-    rprint(f"\nProject will be created at:")
-    rprint(f"  [bold cyan]{project_path}[/bold cyan]")
+    rprint(f"Workspace      : {workspace_path}")
+    rprint(f"Project Folder : {folder_name}")
+    rprint(f"Final Location : {project_path}")
+    rprint("[blue]" + "─" * 47 + "[/blue]")
     rprint()
 
     rprint(f"[bold purple]Creating Project...[/bold purple]")
@@ -1061,4 +1077,15 @@ Generate the fixed and complete file contents:
         return content.strip()
     except Exception:
         return ""
+
+
+def _clean_project_folder_name(title: str) -> str:
+    """Format title into a safe lowercase-hyphenated folder name."""
+    import re
+    cleaned = title.lower().strip()
+    cleaned = re.sub(r'^(build|create|make|generate|develop|write)\s+(a|an|the|our)?\s*', '', cleaned)
+    cleaned = re.sub(r'[^a-z0-9\s\-]', '', cleaned)
+    cleaned = re.sub(r'[\s\-]+', '-', cleaned)
+    return cleaned.strip('-')
+
 

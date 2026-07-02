@@ -147,7 +147,7 @@ def run_setup_wizard() -> bool:
     github_token = ""
     
     while True:
-        print_step_header(1, 3, "GitHub Configuration")
+        print_step_header(1, 4, "GitHub Configuration")
         
         rprint("[bold white]GitHub Username[/bold white]")
         github_username = console.input("[bold purple]> [/bold purple]").strip()
@@ -179,7 +179,7 @@ def run_setup_wizard() -> bool:
     ollama_host = "http://localhost:11434"
     
     while True:
-        print_step_header(2, 3, "AI Provider Selection")
+        print_step_header(2, 4, "AI Provider Selection")
         
         rprint("Choose an AI Provider:\n")
         rprint("  [bold cyan][1][/bold cyan] Ollama (Recommended)")
@@ -240,7 +240,7 @@ def run_setup_wizard() -> bool:
     reasoning_model = "deepseek-r1"
     assistant_model = "llama3.3"
     
-    print_step_header(3, 3, "Default AI Model Selection")
+    print_step_header(3, 4, "Default AI Model Selection")
     
     if provider == "ollama":
         rprint("Choose Default Coding Model:\n")
@@ -290,6 +290,33 @@ def run_setup_wizard() -> bool:
             else:
                 rprint("[bold red]❌ Invalid choice. Select 1, 2, 3, or 4.[/bold red]")
                 
+    # ── STEP 4: Choose your Workspace Location ─────────────────────────────────
+    print_step_header(4, 4, "Choose your Workspace Location")
+    import platform
+    home = os.path.expanduser("~")
+    default_workspace = os.path.join(home, "GC-Projects")
+
+    rprint(f"Default Location: [cyan]{default_workspace}[/cyan]\n")
+    rprint("Press Enter to use default, or enter a custom parent directory path.")
+    parent_input = console.input("[bold purple]Location: [/bold purple]").strip()
+
+    if not parent_input:
+        workspace_path = default_workspace
+    else:
+        parent_input = os.path.abspath(os.path.expanduser(parent_input))
+        if parent_input.endswith("GC-Projects") or parent_input.endswith("GC-Projects/"):
+            workspace_path = parent_input
+        else:
+            workspace_path = os.path.join(parent_input, "GC-Projects")
+
+    try:
+        os.makedirs(workspace_path, exist_ok=True)
+        rprint(f"\n[bold green]✓ Workspace configured at: {workspace_path}[/bold green]")
+    except Exception as e:
+        rprint(f"\n[bold red]❌ Failed to create directory: {e}. Using default instead.[/bold red]")
+        workspace_path = default_workspace
+        os.makedirs(workspace_path, exist_ok=True)
+
     console.input("\nPress Enter to view configuration summary...")
 
     # ── Summary Screen ─────────────────────────────────────────────────────────
@@ -301,6 +328,7 @@ def run_setup_wizard() -> bool:
     summary_text.append(f"GitHub Username : {github_username}\n", style="white")
     summary_text.append(f"AI Provider     : {provider.capitalize()}\n", style="white")
     summary_text.append(f"Coding Model    : {coding_model}\n", style="white")
+    summary_text.append(f"Workspace Path  : {workspace_path}\n", style="white")
     summary_text.append(f"Config Location : {CONFIG_PATH}\n", style="dim")
     
     panel_sum = Panel(
@@ -328,6 +356,7 @@ def run_setup_wizard() -> bool:
         "reasoning_model": reasoning_model,
         "assistant_model": assistant_model,
         "ollama_host": ollama_host,
+        "workspace": workspace_path,
     }
     if openrouter_key:
         settings["openrouter_api_key"] = openrouter_key

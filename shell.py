@@ -24,6 +24,8 @@ from commands.logout import logout_cmd
 from commands.config import config_cmd
 from commands.doctor import doctor_cmd
 from commands.auth import auth_cmd
+from commands.workspace import show_gc_workspace
+from commands.projects import show_gc_projects
 
 console = Console()
 
@@ -51,6 +53,8 @@ commands = {
     "config": config_cmd,
     "doctor": doctor_cmd,
     "auth": auth_cmd,
+    "workspace": show_gc_workspace,
+    "projects": show_gc_projects,
 }
 
 
