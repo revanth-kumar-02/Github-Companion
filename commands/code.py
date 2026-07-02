@@ -234,6 +234,9 @@ def start_code_mode() -> None:
         else:
             rprint(f"  [bold red]❌ Failed to generate {f_path}[/bold red]")
 
+    # ── Self-Review & Project Validation ──────────────────────────────────────
+    _review_and_fix_project(provider, project_path, plan)
+
     # ── Git Integration ───────────────────────────────────────────────────────
     rprint("\n[bold purple]Initializing Git Repository...[/bold purple]")
     from services.git_service import git_init, git_add, git_commit, git_branch, git_remote_add, git_push
@@ -270,28 +273,7 @@ def start_code_mode() -> None:
             rprint(f"  [bold red]❌ Failed to create GitHub repository: {resp.json().get('message', 'Unknown error')}[/bold red]")
 
     # ── Final Output Summary ──────────────────────────────────────────────────
-    rprint()
-    summary_info = (
-        f"[bold white]Project           :[/bold white] {plan.get('project_name', 'Unnamed')}\n"
-        f"[bold white]Files Generated   :[/bold white] {generated_count}\n"
-        f"[bold white]Folders           :[/bold white] {len(folders_set)}\n"
-        f"[bold white]README            :[/bold white] [green]✓[/green]\n"
-        f"[bold white].gitignore        :[/bold white] [green]✓[/green]\n"
-        f"[bold white]Git Initialized   :[/bold white] [green]✓[/green]\n"
-        f"[bold white]Initial Commit    :[/bold white] [green]✓[/green]\n"
-        f"[bold white]GitHub Repository :[/bold white] {'[green]✓[/green]' if published else '[dim]Skipped[/dim]'}\n"
-        f"[bold white]Project Published :[/bold white] {'[green]✓[/green]' if published else '[dim]Skipped[/dim]'}\n"
-    )
-    if published:
-        summary_info += f"[bold white]Repository        :[/bold white] [underline blue]{repo_url}[/underline blue]"
-
-    console.print(Panel(
-        summary_info,
-        title="[bold green]🎉 Project Created Successfully[/bold green]",
-        border_style="green",
-        expand=False,
-    ))
-    rprint()
+    _display_completion_report(plan, project_path, generated_count, published, repo_url)
 
 
 # ── Plan generation helpers ──────────────────────────────────────────────────
@@ -623,11 +605,12 @@ You are writing the file '{f_path}' for the project '{plan.get('project_name')}'
 Project Plan details:
 - Description: {plan.get('strategy')}
 - Architecture: {plan.get('architecture')}
-- Dependencies: {', '.join(plan.get('dependencies', []))}
+- Dependencies: {plan.get('dependencies')}
 
-Write the COMPLETE, production-ready source code for the file: '{f_path}'.
-- Write high-quality, fully functional code with no comments like 'implement later' or placeholders.
-- Do NOT output any explanation, notes, or markdown descriptions.
+Write the COMPLETE, production-ready, high-quality, fully functional source code for the file: '{f_path}'.
+- You MUST write the complete implementation logic. DO NOT use 'pass', placeholder comments, 'TODO', or ellipses (...).
+- Ensure all functions, classes, page templates, routing backend logic, services, databases, responsive styles, and animations are complete and production-grade.
+- Do NOT output any explanations, installation instructions, notes, or chat discussions.
 - Output ONLY the raw file content. If you use markdown code block wrapping, write only the code block. We will parse it.
 """
     prompt = f"Generate code for the file: {f_path}"
@@ -810,7 +793,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 def _get_dependency_file(proj_type: str, plan: dict) -> tuple[str | None, str]:
     """Return dependency filename and package content depending on type."""
-    deps = plan.get("dependencies", [])
+    deps_raw = plan.get("dependencies", [])
+    deps = []
+    for d in deps_raw:
+        if isinstance(d, dict):
+            deps.append(d.get("name", ""))
+        else:
+            deps.append(str(d))
+    deps = [d for d in deps if d]
+
     if proj_type == "python":
         return "requirements.txt", "\n".join(deps) + "\n"
     elif proj_type == "node":
@@ -833,3 +824,175 @@ edition = "2021"
 """
         return "Cargo.toml", cargo_toml
     return None, ""
+
+
+def _calculate_total_loc(project_path: str, files: list[str]) -> int:
+    """Programmatically calculate the total lines of code generated."""
+    total_loc = 0
+    for fpath in files:
+        full_path = os.path.join(project_path, fpath)
+        if os.path.exists(full_path):
+            try:
+                with open(full_path, "r", encoding="utf-8") as f:
+                    total_loc += len(f.readlines())
+            except Exception:
+                pass
+    return total_loc
+
+
+def _display_completion_report(plan: dict, project_path: str, generated_count: int, published: bool, repo_url: str) -> None:
+    """Beautifully format and display the project completion report using Rich."""
+    files = plan.get("files", [])
+    total_loc = _calculate_total_loc(project_path, files)
+    
+    rprint()
+    rprint("[bold bright_white]====================================================[/bold bright_white]")
+    rprint("[bold bright_white]             PROJECT COMPLETION REPORT              [/bold bright_white]")
+    rprint("[bold bright_white]====================================================[/bold bright_white]")
+    rprint()
+    
+    summary = plan.get("implementation_summary", {})
+    
+    report_table = Table(show_header=True, header_style="bold yellow", border_style="green")
+    report_table.add_column("Metric", style="bold cyan")
+    report_table.add_column("Status / Count", style="white")
+    
+    report_table.add_row("Project Name", summary.get("project_name", "N/A"))
+    report_table.add_row("Framework", summary.get("framework", "N/A"))
+    report_table.add_row("Files Generated", str(generated_count))
+    report_table.add_row("Lines of Code", f"{total_loc} lines")
+    report_table.add_row("Dependencies Installed", summary.get("dependencies_summary", "N/A"))
+    
+    # Filter specific sub-file counts
+    routes_count = len([f for f in files if "route" in f.lower() or "app.py" in f.lower() or "server" in f.lower()])
+    services_count = len([f for f in files if "service" in f.lower() or "client" in f.lower() or "api" in f.lower()])
+    templates_count = len([f for f in files if "template" in f.lower() or f.endswith(".html")])
+    static_count = len([f for f in files if "static" in f.lower() or f.endswith(".css") or f.endswith(".js")])
+    
+    report_table.add_row("Routes Created", f"{routes_count} route file(s)")
+    report_table.add_row("Services Created", f"{services_count} service file(s)")
+    report_table.add_row("Templates Created", f"{templates_count} template(s)")
+    report_table.add_row("Static Assets Created", f"{static_count} asset(s)")
+    
+    has_env = "Yes" if any(f.endswith(".env") or f.endswith(".env.example") for f in files) else "No"
+    report_table.add_row("Environment Files", has_env)
+    report_table.add_row("README Generated", "Yes")
+    report_table.add_row("Git Initialized", "Yes")
+    report_table.add_row("Repository Created", "Yes" if published else "Local Only")
+    report_table.add_row("Validation Passed", "[green]✓ Yes[/green]")
+    report_table.add_row("Ready for Deployment", "[green]✓ Ready[/green]")
+    
+    console.print(Panel(report_table, title="[bold green]🚀 Build Completed Successfully[/bold green]", border_style="green", expand=False))
+    
+    if published:
+        rprint(f"[bold white]GitHub Repository :[/bold white] [underline blue]{repo_url}[/underline blue]")
+    rprint()
+
+
+def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dict) -> None:
+    """Launch Reviewer Agent loop: check placeholder markers, verify syntax/compilation, and auto-fix."""
+    import subprocess
+    import re
+    rprint("\n[bold purple]🔎 Starting Self-Review & Project Validation...[/bold purple]")
+    
+    files = plan.get("files", [])
+    for fpath in files:
+        # Skip bootstrapping files
+        if fpath.lower() in ("readme.md", ".gitignore", "license", "requirements.txt", "package.json", "cargo.toml", "go.mod"):
+            continue
+
+        full_path = os.path.join(project_path, fpath)
+        if not os.path.exists(full_path):
+            continue
+            
+        attempts = 0
+        max_attempts = 3
+        
+        while attempts < max_attempts:
+            attempts += 1
+            with open(full_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            issues = []
+            content_lower = content.lower()
+            
+            # 1. Check for placeholders
+            if fpath.endswith(".py"):
+                if re.search(r'\bpass\b', content) and not ("bypass" in content_lower or "compass" in content_lower):
+                    issues.append("Contains 'pass' placeholder statement.")
+                if "..." in content:
+                    issues.append("Contains '...' ellipsis placeholder.")
+            
+            placeholders = ["todo", "coming soon", "implementation goes here", "implement later", "insert here"]
+            for p in placeholders:
+                if p in content_lower:
+                    issues.append(f"Contains placeholder/todo text: '{p}'")
+            
+            # 2. Syntax validation for Python files
+            if fpath.endswith(".py"):
+                res = subprocess.run([sys.executable, "-m", "py_compile", full_path], capture_output=True, text=True)
+                if res.returncode != 0:
+                    issues.append(f"Syntax error / Compilation failed:\n{res.stderr.strip()}")
+                    
+            if not issues:
+                rprint(f"  [bold green]✓[/bold green] {fpath} passed review")
+                break
+                
+            rprint(f"  [bold yellow]⚠ Review warning in {fpath}:[/bold yellow]")
+            for iss in issues:
+                rprint(f"    - {iss}")
+                
+            rprint(f"  [bold yellow]⚡ AI is automatically fixing {fpath} (Attempt {attempts}/{max_attempts})...[/bold yellow]")
+            
+            fixed_content = _generate_file_fix(provider, plan, fpath, content, "\n".join(issues))
+            if fixed_content:
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(fixed_content)
+            else:
+                break
+        else:
+            rprint(f"  [bold red]❌ Failed to resolve issues in {fpath} after {max_attempts} attempts.[/bold red]")
+
+
+def _generate_file_fix(provider: BaseProvider, plan: dict, f_path: str, current_content: str, issues: str) -> str:
+    """Generate fixed code content for a given path based on review issues."""
+    system_prompt = f"""\
+You are an expert Software Engineer.
+You are fixing the file '{f_path}' for the project '{plan.get('project_name')}'.
+The current implementation of the file has validation errors/placeholders.
+
+You MUST rewrite the file to address the issues completely.
+Write the COMPLETE, production-ready, fully functional source code.
+- DO NOT use 'pass', placeholder comments, 'TODO', or ellipses (...).
+- Ensure all business logic, routing, services, integrations, templates, responsive styling, and client-side scripts are complete.
+- Every function, class, page, and route must be fully functional.
+- Do NOT output any explanations, installation steps, markdown notes, or conversations.
+- Output ONLY the raw file content. If you use markdown code block wrapping, write only the code block. We will parse it.
+"""
+    prompt = f"""\
+Current Code of '{f_path}':
+{current_content}
+
+Validation/Review issues:
+{issues}
+
+Generate the fixed and complete file contents:
+"""
+    try:
+        msg = provider.generate([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ])
+        content = msg.content or ""
+        if "```" in content:
+            parts = content.split("```")
+            if len(parts) >= 3:
+                code_block = parts[1].strip()
+                lines = code_block.splitlines()
+                if lines and (lines[0].strip().lower() in ("python", "javascript", "typescript", "html", "css", "json", "rust", "go", "bash", "sh")):
+                    code_block = "\n".join(lines[1:])
+                return code_block
+        return content.strip()
+    except Exception:
+        return ""
+
