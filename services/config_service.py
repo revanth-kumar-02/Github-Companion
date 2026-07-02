@@ -108,3 +108,8 @@ def add_custom_model(model: dict) -> None:
         settings["custom_models"] = []
     settings["custom_models"].append(model)
     save_settings(settings)
+
+
+def get_default_workspace() -> str:
+    """Return the default workspace directory, or empty string if not set."""
+    return _load().get("workspace", "")

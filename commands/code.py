@@ -172,7 +172,46 @@ def start_code_mode() -> None:
     # ── Project Bootstrap Phase ─────────────────────────────────────────────────
     rprint()
     project_name = plan.get("project_name", "my-project").replace(" ", "-").lower()
-    project_path = os.path.abspath(os.path.join(os.getcwd(), project_name))
+
+    from services.config_service import get_default_workspace
+    default_ws = get_default_workspace()
+
+    rprint("[bold bright_white]Project Location Configuration[/bold bright_white]")
+    rprint("[blue]" + "─" * 47 + "[/blue]")
+    if default_ws:
+        rprint(f"Default Workspace: [cyan]{default_ws}[/cyan]")
+        use_default = console.input(f"Use default workspace? (y/n) [default: y] : ").strip().lower()
+        if use_default in ("", "y", "yes"):
+            parent_dir = default_ws
+        else:
+            parent_dir = console.input("Enter parent directory path: ").strip()
+    else:
+        parent_dir = console.input("Enter parent directory path [default: current folder] : ").strip()
+
+    if not parent_dir:
+        parent_dir = os.getcwd()
+
+    parent_dir = os.path.abspath(os.path.expanduser(parent_dir))
+    project_path = os.path.join(parent_dir, project_name)
+
+    if not os.path.exists(parent_dir):
+        rprint(f"[bold yellow]Directory '{parent_dir}' does not exist.[/bold yellow]")
+        create_parent = console.input("Create it? (y/n) : ").strip().lower()
+        if create_parent in ("y", "yes"):
+            try:
+                os.makedirs(parent_dir, exist_ok=True)
+            except Exception as e:
+                error(f"Failed to create directory: {e}. Defaulting to current working directory.")
+                parent_dir = os.getcwd()
+                project_path = os.path.join(parent_dir, project_name)
+        else:
+            rprint("[dim]Defaulting to current working directory.[/dim]")
+            parent_dir = os.getcwd()
+            project_path = os.path.join(parent_dir, project_name)
+
+    rprint(f"\nProject will be created at:")
+    rprint(f"  [bold cyan]{project_path}[/bold cyan]")
+    rprint()
 
     rprint(f"[bold purple]Creating Project...[/bold purple]")
     os.makedirs(project_path, exist_ok=True)
@@ -274,6 +313,33 @@ def start_code_mode() -> None:
 
     # ── Final Output Summary ──────────────────────────────────────────────────
     _display_completion_report(plan, project_path, generated_count, published, repo_url)
+
+    # ── Open Options ──────────────────────────────────────────────────────────
+    rprint()
+    open_choice = console.input("[bold yellow]Open Project folder? (y/n) : [/bold yellow]").strip().lower()
+    if open_choice in ("y", "yes"):
+        import platform
+        import subprocess
+        try:
+            if platform.system() == "Windows":
+                os.startfile(project_path)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", project_path])
+            else:
+                subprocess.Popen(["xdg-open", project_path])
+            success("Project folder opened.")
+        except Exception as e:
+            error(f"Could not open folder: {e}")
+
+    code_choice = console.input("[bold yellow]Open in VS Code? (y/n) : [/bold yellow]").strip().lower()
+    if code_choice in ("y", "yes"):
+        import subprocess
+        try:
+            subprocess.Popen(["code", project_path], shell=True)
+            success("VS Code launched.")
+        except Exception as e:
+            error(f"Could not open in VS Code: {e}")
+
 
 
 # ── Plan generation helpers ──────────────────────────────────────────────────

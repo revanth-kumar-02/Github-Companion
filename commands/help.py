@@ -49,7 +49,7 @@ def show_help():
         ("auth",      "System",       "Manage GitHub and OpenRouter authentication credentials"),
         ("login",     "System",       "Reconfigure GitHub credentials"),
         ("logout",    "System",       "Remove GitHub credentials"),
-        ("config",    "System",       "Display current settings. Try: 'config edit', 'config reset', 'config ai'"),
+        ("config",    "System",       "Display current settings. Try: 'config edit', 'config reset', 'config ai', 'config workspace'"),
         ("doctor",    "System",       "Diagnose Git, GitHub, Internet, and AI. Try: 'doctor ai'"),
 
         ("version",   "System",       "Show installed Git version"),

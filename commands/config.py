@@ -28,6 +28,8 @@ def config_cmd(args: list[str] = None) -> None:
         _reset_config()
     elif subcommand == "ai":
         _config_ai()
+    elif subcommand == "workspace":
+        _config_workspace()
     else:
         _display_config()
 
@@ -212,4 +214,56 @@ def _config_ai() -> None:
             break
         else:
             error("Invalid choice.")
+
+
+def _config_workspace() -> None:
+    """Interactive settings view and modification of the default project workspace path."""
+    while True:
+        settings = _load()
+        current_ws = settings.get("workspace", "")
+
+        rprint()
+        rprint("[bold bright_white]Workspace Configuration[/bold bright_white]")
+        rprint("[blue]" + "─" * 47 + "[/blue]")
+        rprint(f"  Current Workspace : {current_ws or 'Not Set (Defaults to current working directory)'}")
+        rprint()
+
+        rprint("[bold white]Options:[/bold white]")
+        rprint("  [bold cyan]1[/bold cyan]. Change Workspace")
+        rprint("  [bold cyan]2[/bold cyan]. Reset Workspace")
+        rprint("  [bold cyan]3[/bold cyan]. Back to GC shell")
+        rprint()
+
+        choice = console.input("[bold yellow]Select option (1-3) : [/bold yellow]").strip()
+
+        if choice == "1":
+            new_ws = console.input("\nEnter new workspace directory path: ").strip()
+            if new_ws:
+                resolved_path = os.path.abspath(os.path.expanduser(new_ws))
+                if not os.path.exists(resolved_path):
+                    rprint(f"[bold yellow]Directory '{resolved_path}' does not exist.[/bold yellow]")
+                    create = console.input("Create it? (y/n) : ").strip().lower()
+                    if create == "y":
+                        try:
+                            os.makedirs(resolved_path, exist_ok=True)
+                            success(f"Directory '{resolved_path}' created.")
+                        except Exception as e:
+                            error(f"Failed to create directory: {e}")
+                            continue
+                    else:
+                        rprint("[dim]  Cancelled workspace update.[/dim]")
+                        continue
+                
+                settings["workspace"] = resolved_path
+                save_settings(settings)
+                success(f"Workspace path updated and saved successfully.")
+        elif choice == "2":
+            settings["workspace"] = ""
+            save_settings(settings)
+            success("Workspace path reset to default.")
+        elif choice == "3" or choice.lower() in ("exit", "back"):
+            break
+        else:
+            error("Invalid choice.")
+
 
