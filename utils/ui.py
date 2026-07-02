@@ -1,5 +1,5 @@
-import pyfiglet
 from rich import print
+
 def header():
     banner = r"""
  ██████╗  ██████╗

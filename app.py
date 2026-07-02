@@ -11,6 +11,10 @@ from commands.heatmap import show_gc_heatmap
 from commands.create import create_repos
 from commands.delete import delete_repo
 from commands.rename import rename_repo
+from commands.publish import show_gc_publish
+from commands.search import gc_search
+from commands.readme import show_gc_readme
+from commands.ai_cmd import start_ai_mode
 from utils.ui import header
 from shell import start_shell
 
@@ -36,7 +40,11 @@ def main():
         "help": show_help,
         "create": create_repos,
         "delete" : delete_repo,
-        "rename": rename_repo
+        "rename": rename_repo,
+        "publish": show_gc_publish,
+        "search": gc_search,
+        "readme": show_gc_readme,
+        "ai": start_ai_mode,
     }
 
     if command in commands:

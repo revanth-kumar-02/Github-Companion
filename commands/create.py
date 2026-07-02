@@ -15,12 +15,10 @@ def create_repos():
     )
 
     if response.status_code == 201:
-        if response.status_code == 201:
-            repo = response.json()
-            print()
-            success(f"Repository '{repo_name}' created successfully.")
-            print(f"[bold cyan]🌐 Repository URL :[/bold cyan] [underline blue]{repo['html_url']}[/underline blue]")
-            
+        repo = response.json()
+        print()
+        success(f"Repository '{repo_name}' created successfully.")
+        print(f"[bold cyan]🌐 Repository URL :[/bold cyan] [underline blue]{repo['html_url']}[/underline blue]")
 
 
 
