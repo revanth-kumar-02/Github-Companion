@@ -46,10 +46,15 @@ def show_help():
         ("code",      "AI Agent",     "Autonomous AI Coding Agent (planning + generation)"),
         ("models",    "AI Agent",     "Register and manage custom AI models"),
         # System
+        ("login",     "System",       "Reconfigure GitHub credentials"),
+        ("logout",    "System",       "Remove GitHub credentials"),
+        ("config",    "System",       "Display current settings. Try: 'config edit' or 'config reset'"),
+        ("doctor",    "System",       "Diagnose Git, GitHub, Internet, and AI providers status"),
         ("version",   "System",       "Show installed Git version"),
         ("status",    "System",       "Show current Git status"),
         ("help",      "System",       "Show this help table"),
         ("exit",      "System",       "Exit the interactive shell"),
+
 
     ]
 

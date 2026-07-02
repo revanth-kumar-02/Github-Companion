@@ -1,22 +1,47 @@
 import json
+import os
+from pathlib import Path
 
-CONFIG_PATH = "config/settings.json"
+GC_DIR = Path.home() / ".gc"
+CONFIG_PATH = GC_DIR / "config.json"
+
+
+def is_configured() -> bool:
+    """Check if the configuration file exists."""
+    return CONFIG_PATH.exists()
+
+
+def ensure_gc_directories() -> None:
+    """Ensure all required .gc directories exist."""
+    GC_DIR.mkdir(parents=True, exist_ok=True)
+    (GC_DIR / "cache").mkdir(parents=True, exist_ok=True)
+    (GC_DIR / "logs").mkdir(parents=True, exist_ok=True)
+    (GC_DIR / "sessions").mkdir(parents=True, exist_ok=True)
+    history_file = GC_DIR / "history.json"
+    if not history_file.exists():
+        with open(history_file, "w") as f:
+            json.dump([], f)
 
 
 def _load() -> dict:
-    """Load settings.json and return the dict."""
+    """Load config.json and return the dict."""
+    if not CONFIG_PATH.exists():
+        return {}
     with open(CONFIG_PATH, "r") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except Exception:
+            return {}
 
 
 # ── GitHub ─────────────────────────────────────────────────────────────────────
 
 def get_github_username() -> str:
-    return _load()["github_username"]
+    return _load().get("github_username", "")
 
 
 def get_github_token() -> str:
-    return _load()["github_token"]
+    return _load().get("github_token", "")
 
 
 # ── AI Provider ────────────────────────────────────────────────────────────────
@@ -66,14 +91,14 @@ def get_openrouter_api_key() -> str:
     if not key or key in ("YOUR_OPENROUTER_KEY_HERE", "YOUR_KEY"):
         raise ValueError(
             "OpenRouter API key not configured.\n"
-            "  Open config/settings.json and set:\n"
-            '  "openrouter_api_key": "sk-or-..."'
+            "  Please edit config and set openrouter_api_key."
         )
     return key
 
 
 def save_settings(settings: dict) -> None:
-    """Save the settings dict back to config/settings.json."""
+    """Save the settings dict back to config.json."""
+    ensure_gc_directories()
     with open(CONFIG_PATH, "w") as f:
         json.dump(settings, f, indent=4)
 

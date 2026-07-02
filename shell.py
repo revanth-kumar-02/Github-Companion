@@ -19,6 +19,10 @@ from commands.ai_cmd import start_ai_mode
 from commands.ask import start_ask_mode
 from commands.code import start_code_mode
 from commands.models import show_models_menu
+from commands.login import login_cmd
+from commands.logout import logout_cmd
+from commands.config import config_cmd
+from commands.doctor import doctor_cmd
 
 console = Console()
 
@@ -41,23 +45,43 @@ commands = {
     "ask": start_ask_mode,
     "code": start_code_mode,
     "models": show_models_menu,
+    "login": login_cmd,
+    "logout": logout_cmd,
+    "config": config_cmd,
+    "doctor": doctor_cmd,
 }
 
 
 def start_shell():
     header()
     while True:
-        user_input = console.input("[bold blue]GC > [/bold blue]").strip().lower()
-        if user_input in commands:
-            commands[user_input]()
+        try:
+            user_input = console.input("[bold blue]GC > [/bold blue]").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[green]Goodbye![/green]")
+            break
+
+        if not user_input:
             continue
-        
-        if user_input in ("exit", "quit"):
+
+        parts = user_input.split()
+        cmd = parts[0].lower()
+        args = parts[1:]
+
+        if cmd in commands:
+            if cmd == "config":
+                commands[cmd](args)
+            else:
+                commands[cmd]()
+            continue
+
+        if cmd in ("exit", "quit"):
             console.print("[green]Goodbye![/green]")
             break
-        
-        console.print(f"[red]Unknown command:[/red] {user_input}")
+
+        console.print(f"[red]Unknown command:[/red] {cmd}")
         console.print("Type 'help' to see available commands.")
 
+
 if __name__ == "__main__":
-    start_shell()
+    start_shell()

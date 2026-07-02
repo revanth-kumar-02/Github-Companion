@@ -18,11 +18,22 @@ from commands.ai_cmd import start_ai_mode
 from commands.ask import start_ask_mode
 from commands.code import start_code_mode
 from commands.models import show_models_menu
+from commands.login import login_cmd
+from commands.logout import logout_cmd
+from commands.config import config_cmd
+from commands.doctor import doctor_cmd
 from utils.ui import header
 from shell import start_shell
 
 
 def main():
+    from services.config_service import is_configured
+    from services.setup_wizard import run_setup_wizard
+
+    if not is_configured():
+        success = run_setup_wizard()
+        if not success:
+            sys.exit(1)
 
     if len(sys.argv) == 1:
         start_shell()
@@ -51,15 +62,23 @@ def main():
         "ask": start_ask_mode,
         "code": start_code_mode,
         "models": show_models_menu,
+        "login": login_cmd,
+        "logout": logout_cmd,
+        "config": config_cmd,
+        "doctor": doctor_cmd,
     }
 
 
     if command in commands:
-        commands[command]()
+        if command == "config":
+            commands[command](sys.argv[2:])
+        else:
+            commands[command]()
     else:
         show_help()
 
 
 if __name__ == "__main__":
     main()
+
 
