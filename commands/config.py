@@ -73,7 +73,7 @@ def _edit_config() -> None:
     if username:
         settings["github_username"] = username
 
-    token = console.input("[bold cyan]  GitHub Token [/bold cyan][dim](Enter to keep current)[/dim] : ", password=True).strip()
+    token = console.input("[bold cyan]  GitHub Token [/bold cyan][dim](Enter to keep current)[/dim] : ").strip()
     if token:
         settings["github_token"] = token
 
@@ -100,7 +100,7 @@ def _edit_config() -> None:
         if host:
             settings["ollama_host"] = host
     elif settings.get("provider") == "openrouter":
-        key = console.input("[bold cyan]  OpenRouter API Key [/bold cyan][dim](Enter to keep current)[/dim] : ", password=True).strip()
+        key = console.input("[bold cyan]  OpenRouter API Key [/bold cyan][dim](Enter to keep current)[/dim] : ").strip()
         if key:
             settings["openrouter_api_key"] = key
 

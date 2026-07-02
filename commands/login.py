@@ -15,7 +15,7 @@ def login_cmd() -> None:
     rprint("[blue]" + "─" * 47 + "[/blue]")
 
     username = console.input("[bold cyan]  GitHub Username             : [/bold cyan]").strip()
-    token = console.input("[bold cyan]  GitHub Personal Access Token : [/bold cyan]", password=True).strip()
+    token = console.input("[bold cyan]  GitHub Personal Access Token : [/bold cyan]").strip()
 
     if not username or not token:
         error("Username and Token are required.")

@@ -38,7 +38,7 @@ def run_setup_wizard() -> bool:
         rprint("[dim]───────────────────────────────────────────────[/dim]")
         github_username = console.input("[bold white]  GitHub Username             : [/bold white]").strip()
         # Input password hides typing automatically
-        github_token = console.input("[bold white]  GitHub Personal Access Token : [/bold white]", password=True).strip()
+        github_token = console.input("[bold white]  GitHub Personal Access Token : [/bold white]").strip()
 
         if not github_username or not github_token:
             rprint("[bold red]❌ Username and Token are required.[/bold red]")
@@ -89,7 +89,7 @@ def run_setup_wizard() -> bool:
         elif choice == "2":
             provider = "openrouter"
             while True:
-                openrouter_key = console.input("[bold white]  OpenRouter API Key : [/bold white]", password=True).strip()
+                openrouter_key = console.input("[bold white]  OpenRouter API Key : [/bold white]").strip()
                 if not openrouter_key:
                     rprint("[bold red]❌ API Key is required for OpenRouter.[/bold red]")
                     continue
