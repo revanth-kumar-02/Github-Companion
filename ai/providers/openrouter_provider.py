@@ -76,49 +76,99 @@ class OpenRouterProvider(BaseProvider):
         messages: list[dict[str, Any]],
         tools: list[dict] | None = None,
     ) -> Any:
-        """Send a chat completion request to OpenRouter."""
+        """Send a chat completion request to OpenRouter using requests.post for direct pipeline validation and debugging."""
         import os
+        import json
+        import requests
         from rich import print as rprint
+        from types import SimpleNamespace
+        from services.config_service import CONFIG_PATH, get_openrouter_api_key
 
-        # Build authorization and identity headers
+        # 1. Verify key loading from config.json
+        api_key = get_openrouter_api_key()
+
+        # 2. Key variables
+        api_key_exists = api_key is not None
+        api_key_len = len(api_key) if api_key else 0
+        first_8 = api_key[:8] if api_key_len >= 8 else (api_key or "")
+
+        # 3. Setup endpoint
+        endpoint = "https://openrouter.ai/api/v1/chat/completions"
+
+        # 4. Build headers
         headers = {
+            "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/revanth-kumar-02/Github-Companion",
-            "X-Title":      "GitHub Companion",
-            "Authorization": f"Bearer {self._api_key}",
+            "X-Title": "GitHub Companion",
         }
+        
+        auth_present = False
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+            auth_present = True
 
-        # Print debug information during development
-        if os.environ.get("GC_DEBUG") == "true":
-            masked_key = self._api_key[:6] + "*" * (len(self._api_key) - 6) if len(self._api_key) > 6 else "*" * 8
-            rprint()
-            rprint("[bold yellow]── OpenRouter Debug Info ──[/bold yellow]")
-            rprint(f"  [bold white]Provider[/bold white]      : OpenRouter")
-            rprint(f"  [bold white]Model[/bold white]         : {self._model}")
-            rprint(f"  [bold white]Endpoint[/bold white]      : {self.BASE_URL}/chat/completions")
-            rprint(f"  [bold white]Authorization[/bold white] : Bearer {masked_key}")
-            rprint(f"  [bold white]Configuration[/bold white] : Loaded Successfully")
-            rprint("[bold yellow]──────────────────────────[/bold yellow]")
-            rprint()
-
-        kwargs: dict[str, Any] = {
-            "model":       self._model,
-            "messages":    messages,
+        # 5. Build body
+        payload = {
+            "model": self._model,
+            "messages": messages,
             "temperature": 0.2,
-            "max_tokens":  2048,
-            "extra_headers": headers,
+            "max_tokens": 2048,
         }
         if tools and self.supports_tools():
-            kwargs["tools"]       = tools
-            kwargs["tool_choice"] = "auto"
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
 
+        # Check debug mode
+        debug_mode = (
+            os.environ.get("DEBUG") == "True"
+            or os.environ.get("GC_DEBUG") == "true"
+        )
+
+        if debug_mode:
+            masked_key = f"Bearer {first_8}" + "*" * (api_key_len - 8) if api_key else "None"
+            rprint()
+            rprint("--------------------------------------------------")
+            rprint("Configuration Loaded")
+            rprint()
+            rprint(f"Provider: OpenRouter")
+            rprint(f"API Key Exists: {api_key_exists}")
+            rprint(f"API Key Length: {api_key_len}")
+            rprint(f"First 8 characters: {first_8}")
+            rprint(f"Model: {self._model}")
+            rprint(f"Endpoint: {endpoint}")
+            rprint("--------------------------------------------------")
+            rprint("Headers")
+            rprint()
+            rprint(f"Authorization Present: {auth_present}")
+            rprint(f"Authorization Header: {masked_key}")
+            rprint(f"Content-Type: application/json")
+            rprint("--------------------------------------------------")
+            rprint("Request")
+            rprint()
+            rprint(f"URL: {endpoint}")
+            rprint(f"Model: {self._model}")
+            rprint(f"Messages: {json.dumps(messages, indent=2)}")
+            rprint("--------------------------------------------------")
+            rprint()
+
+        # Send Request
         try:
-            response = self._client.chat.completions.create(**kwargs)
-            return response.choices[0].message
+            resp = requests.post(endpoint, json=payload, headers=headers, timeout=60)
         except Exception as exc:
-            exc_str = str(exc)
-            # If authentication fails or 401 encountered, raise a clear formatted error
-            if "401" in exc_str or "unauthorized" in exc_str.lower() or "authentication" in exc_str.lower():
-                error_msg = """\
+            raise RuntimeError(f"OpenRouter request failed: {exc}")
+
+        if debug_mode:
+            rprint("Response")
+            rprint()
+            rprint(f"Status Code: {resp.status_code}")
+            rprint(f"Headers: {dict(resp.headers)}")
+            rprint(f"Body: {resp.text}")
+            rprint("--------------------------------------------------")
+            rprint()
+
+        # Handle authentication errors
+        if resp.status_code == 401:
+            error_msg = """\
 [bold red]OpenRouter authentication failed.[/bold red]
 
 Possible causes:
@@ -127,10 +177,43 @@ Possible causes:
  • Authorization header missing
  • Configuration not saved correctly
 """
-                if os.environ.get("GC_DEBUG") == "true":
-                    error_msg += f"\n[dim]Original response: {exc_str}[/dim]"
-                raise RuntimeError(error_msg)
-            raise
+            if debug_mode:
+                error_msg += f"\n[dim]Original response: {resp.text}[/dim]"
+            raise RuntimeError(error_msg)
+
+        try:
+            data = resp.json()
+        except Exception:
+            raise RuntimeError(f"OpenRouter response is not valid JSON. HTTP {resp.status_code}: {resp.text}")
+
+        if "error" in data:
+            err_msg = data["error"].get("message", "Unknown OpenRouter error")
+            raise RuntimeError(f"OpenRouter API error: {err_msg}")
+
+        try:
+            choices = data["choices"]
+            message_data = choices[0]["message"]
+            content = message_data.get("content")
+            raw_tool_calls = message_data.get("tool_calls")
+            
+            tool_calls = None
+            if raw_tool_calls:
+                tool_calls = []
+                for tc in raw_tool_calls:
+                    fn = SimpleNamespace(
+                        name=tc.get("function", {}).get("name", ""),
+                        arguments=tc.get("function", {}).get("arguments", "{}")
+                    )
+                    tool_calls.append(SimpleNamespace(
+                        id=tc.get("id", ""),
+                        type=tc.get("type", "function"),
+                        function=fn
+                    ))
+
+            return SimpleNamespace(content=content, tool_calls=tool_calls)
+        except Exception as parse_err:
+            raise RuntimeError(f"Failed to parse OpenRouter response: {parse_err}. Raw body: {data}")
+
 
 
     def list_models(self) -> list[str]:

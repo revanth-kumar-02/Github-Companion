@@ -395,13 +395,14 @@ def _detect_ollama(host: str) -> bool:
 
 
 def _validate_openrouter_key(api_key: str) -> bool:
-    """Verify OpenRouter key validity by hitting its models endpoint."""
+    """Verify OpenRouter key validity by hitting its auth key status endpoint."""
     try:
         headers = {"Authorization": f"Bearer {api_key}"}
-        resp = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=10)
+        resp = requests.get("https://openrouter.ai/api/v1/auth/key", headers=headers, timeout=10)
         return resp.status_code == 200
     except Exception:
         return False
+
 
 
 def ensure_openrouter_authenticated() -> str:
