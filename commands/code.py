@@ -16,6 +16,7 @@ from ai.providers.base_provider import BaseProvider
 from ai.providers.ollama_provider import OllamaProvider
 from ai.providers.openrouter_provider import OpenRouterProvider
 from ai.providers.nvidia_provider import NvidiaProvider
+from ai.requirement_expansion import RequirementExpansionEngine
 from services.config_service import (
     get_custom_models,
     get_ollama_host,
@@ -143,8 +144,21 @@ def start_code_mode() -> None:
         error("Project idea cannot be empty.")
         return
 
+    # ── Requirement Expansion Stage ───────────────────────────────────────────
+    expanded_spec = None
+    with console.status("[bold yellow]Running Requirement Expansion Engine...[/bold yellow]", spinner="dots"):
+        expanded_spec = RequirementExpansionEngine.expand(provider, project_idea)
+    
+    if expanded_spec:
+        RequirementExpansionEngine.display(expanded_spec)
+        rprint()
+        proceed = console.input("[bold yellow]Proceed to detailed Implementation Planning? (y/n) [y]: [/bold yellow]").strip().lower()
+        if proceed not in ("", "y", "yes"):
+            rprint("[dim]  Cancelled by user.[/dim]")
+            return
+
     # ── Planning Stage ────────────────────────────────────────────────────────
-    plan = _generate_plan(provider, project_idea)
+    plan = _generate_plan(provider, project_idea, expanded_spec)
     if not plan:
         error("Failed to generate implementation plan.")
         return
@@ -172,7 +186,7 @@ def start_code_mode() -> None:
             return
         elif action == "R":
             with console.status("[bold yellow]  Regenerating new plan...[/bold yellow]", spinner="dots"):
-                plan = _generate_plan(provider, project_idea)
+                plan = _generate_plan(provider, project_idea, expanded_spec)
             if not plan:
                 error("Failed to generate implementation plan.")
                 return
@@ -180,7 +194,8 @@ def start_code_mode() -> None:
             feedback = console.input("\n[bold cyan]What would you like to edit? : [/bold cyan]").strip()
             if feedback:
                 with console.status("[bold yellow]  Re-planning project...[/bold yellow]", spinner="dots"):
-                    plan = _regenerate_plan(provider, project_idea, plan, feedback)
+                    # Pass the expanded specification to help shape the edited plan
+                    plan = _regenerate_plan(provider, project_idea, plan, f"{feedback}\nExpanded Spec: {json.dumps(expanded_spec)}")
                 if not plan:
                     error("Failed to update implementation plan.")
                     return
@@ -224,7 +239,21 @@ def start_plan_mode() -> None:
         error("Project idea cannot be empty.")
         return
 
-    plan = _generate_plan(provider, project_idea)
+    # ── Requirement Expansion Stage ───────────────────────────────────────────
+    expanded_spec = None
+    with console.status("[bold yellow]Running Requirement Expansion Engine...[/bold yellow]", spinner="dots"):
+        expanded_spec = RequirementExpansionEngine.expand(provider, project_idea)
+    
+    if expanded_spec:
+        RequirementExpansionEngine.display(expanded_spec)
+        rprint()
+        proceed = console.input("[bold yellow]Proceed to detailed Implementation Planning? (y/n) [y]: [/bold yellow]").strip().lower()
+        if proceed not in ("", "y", "yes"):
+            rprint("[dim]  Cancelled by user.[/dim]")
+            return
+
+    # ── Planning Stage ────────────────────────────────────────────────────────
+    plan = _generate_plan(provider, project_idea, expanded_spec)
     if not plan:
         error("Failed to generate implementation plan.")
         return
@@ -252,7 +281,7 @@ def start_plan_mode() -> None:
             return
         elif action == "R":
             with console.status("[bold yellow]  Regenerating new plan...[/bold yellow]", spinner="dots"):
-                plan = _generate_plan(provider, project_idea)
+                plan = _generate_plan(provider, project_idea, expanded_spec)
             if not plan:
                 error("Failed to generate implementation plan.")
                 return
@@ -260,7 +289,7 @@ def start_plan_mode() -> None:
             feedback = console.input("\n[bold cyan]What would you like to edit? : [/bold cyan]").strip()
             if feedback:
                 with console.status("[bold yellow]  Re-planning project...[/bold yellow]", spinner="dots"):
-                    plan = _regenerate_plan(provider, project_idea, plan, feedback)
+                    plan = _regenerate_plan(provider, project_idea, plan, f"{feedback}\nExpanded Spec: {json.dumps(expanded_spec)}")
                 if not plan:
                     error("Failed to update implementation plan.")
                     return
@@ -449,7 +478,7 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> dict | None:
 
 # ── Plan generation helpers ──────────────────────────────────────────────────
 
-def _generate_plan(provider: BaseProvider, project_idea: str) -> dict | None:
+def _generate_plan(provider: BaseProvider, project_idea: str, expanded_spec: dict | None = None) -> dict | None:
     """Request the AI to generate a structured implementation plan in JSON."""
     system_prompt = """\
 You are a Senior Software Architect. Analyze the user's project request and generate a highly detailed, professional, structured JSON implementation plan.
@@ -530,7 +559,11 @@ The JSON object must contain the following keys:
   }
 }
 """
-    prompt = f"Analyze and plan: {project_idea}"
+    spec_context = ""
+    if expanded_spec:
+        spec_context = f"\nRequirement Expansion & Inferred Specifications to incorporate:\n{json.dumps(expanded_spec, indent=2)}\n"
+        
+    prompt = f"Analyze and plan: {project_idea}\n{spec_context}"
 
     with console.status("[bold yellow]  Planning project...[/bold yellow]", spinner="dots"):
         try:
