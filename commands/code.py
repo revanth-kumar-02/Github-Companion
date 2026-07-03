@@ -357,108 +357,303 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> dict | None:
     rprint(f"Final Location : {project_path}")
     rprint("[blue]" + "─" * 47 + "[/blue]")
     rprint()
-
     rprint(f"[bold purple]Creating Project...[/bold purple]")
     os.makedirs(project_path, exist_ok=True)
 
     # 1. Detect project type
     proj_type = _detect_project_type(plan)
 
-    # 2. Generate .gitignore
-    gitignore_content = _get_gitignore_template(proj_type)
-    with open(os.path.join(project_path, ".gitignore"), "w", encoding="utf-8") as f:
-        f.write(gitignore_content)
-    rprint("  [bold green]✓[/bold green] .gitignore")
+    directories_created = []
+    files_created = []
+    files_failed = []
+    missing_assets = []
 
-    # 3. Generate LICENSE
-    author_name = get_github_username() or "GitHub Companion User"
-    license_content = _get_license_template(author_name)
-    with open(os.path.join(project_path, "LICENSE"), "w", encoding="utf-8") as f:
-        f.write(license_content)
-    rprint("  [bold green]✓[/bold green] LICENSE")
+    # ── Directory Creation Phase ──────────────────────────────────────────────
+    # A. Explicit directories from the planner
+    explicit_dirs = plan.get("directories", [])
+    for d_path in explicit_dirs:
+        if not d_path:
+            continue
+        full_d_path = os.path.join(project_path, d_path)
+        try:
+            os.makedirs(full_d_path, exist_ok=True)
+            directories_created.append(d_path)
+        except Exception as e:
+            files_failed.append((d_path, f"Failed to create directory: {e}"))
 
-    # 4. Generate README.md
-    readme_content = _get_readme_template(plan)
-    with open(os.path.join(project_path, "README.md"), "w", encoding="utf-8") as f:
-        f.write(readme_content)
-    rprint("  [bold green]✓[/bold green] README.md")
+    # B. Implicit directories from files, templates, static_resources, and assets
+    for category in ("files", "templates", "static_resources", "assets"):
+        for path_entry in plan.get(category, []):
+            if not path_entry:
+                continue
+            if path_entry.endswith("/") or path_entry.endswith("\\"):
+                full_d_path = os.path.join(project_path, path_entry)
+                try:
+                    os.makedirs(full_d_path, exist_ok=True)
+                    directories_created.append(path_entry)
+                except Exception as e:
+                    files_failed.append((path_entry, f"Failed to create directory: {e}"))
+            else:
+                parent_dir = os.path.dirname(path_entry)
+                if parent_dir:
+                    full_d_path = os.path.join(project_path, parent_dir)
+                    try:
+                        os.makedirs(full_d_path, exist_ok=True)
+                        directories_created.append(parent_dir)
+                    except Exception as e:
+                        files_failed.append((parent_dir, f"Failed to create directory: {e}"))
 
-    # 5. Generate dependency files
-    dep_file, dep_content = _get_dependency_file(proj_type, plan)
+    # ── Bootstrap Files Generation (MIT License, gitignore, README) ───────────
+    # Generate .gitignore
+    try:
+        gitignore_content = _get_gitignore_template(proj_type)
+        with open(os.path.join(project_path, ".gitignore"), "w", encoding="utf-8") as f:
+            f.write(gitignore_content)
+        files_created.append(".gitignore")
+        rprint("  [bold green]✓[/bold green] .gitignore")
+    except Exception as e:
+        files_failed.append((".gitignore", str(e)))
+
+    # Generate LICENSE
+    try:
+        author_name = get_github_username() or "GitHub Companion User"
+        license_content = _get_license_template(author_name)
+        with open(os.path.join(project_path, "LICENSE"), "w", encoding="utf-8") as f:
+            f.write(license_content)
+        files_created.append("LICENSE")
+        rprint("  [bold green]✓[/bold green] LICENSE")
+    except Exception as e:
+        files_failed.append(("LICENSE", str(e)))
+
+    # Generate README.md
+    try:
+        readme_content = _get_readme_template(plan)
+        with open(os.path.join(project_path, "README.md"), "w", encoding="utf-8") as f:
+            f.write(readme_content)
+        files_created.append("README.md")
+        rprint("  [bold green]✓[/bold green] README.md")
+    except Exception as e:
+        files_failed.append(("README.md", str(e)))
+
+    # Generate dependency files
+    dep_file = None
+    try:
+        dep_file, dep_content = _get_dependency_file(proj_type, plan)
+        if dep_file:
+            with open(os.path.join(project_path, dep_file), "w", encoding="utf-8") as f:
+                f.write(dep_content)
+            files_created.append(dep_file)
+            rprint(f"  [bold green]✓[/bold green] {dep_file}")
+    except Exception as e:
+        if dep_file:
+            files_failed.append((dep_file, str(e)))
+
+    # ── Code / Asset / Template Generation Stage ──────────────────────────────
+    # Process each category independently
+    for category in ("files", "templates", "static_resources", "assets"):
+        category_entries = plan.get(category, [])
+        for f_path in category_entries:
+            if not f_path:
+                continue
+            # Skip bootstrapping / metadata files if they were listed in plan files
+            if f_path.lower() in ("readme.md", ".gitignore", "license", "requirements.txt", "package.json", "cargo.toml", "go.mod"):
+                continue
+
+            # Check if this path represents a directory (ends with slash)
+            if f_path.endswith("/") or f_path.endswith("\\"):
+                # Already created in directory phase, skip file writing
+                continue
+
+            full_f_path = os.path.join(project_path, f_path)
+            
+            # Double check path isn't an existing directory to avoid PermissionError
+            if os.path.exists(full_f_path) and os.path.isdir(full_f_path):
+                files_failed.append((f_path, "Path is already a directory"))
+                if category == "assets":
+                    missing_assets.append(f_path)
+                continue
+
+            # Generate and write file with full fault-tolerance
+            try:
+                # Ensure parent directories exist
+                os.makedirs(os.path.dirname(full_f_path), exist_ok=True)
+                
+                with console.status(f"[bold yellow]Generating {f_path}...[/bold yellow]", spinner="dots"):
+                    code_content = _generate_file_content(provider, plan, f_path)
+
+                if code_content is not None:
+                    with open(full_f_path, "w", encoding="utf-8") as f:
+                        f.write(code_content)
+                    files_created.append(f_path)
+                    rprint(f"  [bold green]✓[/bold green] {f_path}")
+                else:
+                    raise ValueError("Generation returned empty/null content")
+            except Exception as e:
+                rprint(f"  [bold red]❌ Failed to generate {f_path}: {e}[/bold red]")
+                files_failed.append((f_path, str(e)))
+                if category == "assets":
+                    missing_assets.append(f_path)
+
+    # ── Self-Review & Project Validation ──────────────────────────────────────
+    try:
+        _review_and_fix_project(provider, project_path, plan)
+    except Exception as e:
+        rprint(f"  [bold red]❌ Review & Fix phase failed: {e}[/bold red]")
+
+    # ── Generation Validation ─────────────────────────────────────────────────
+    validation_passed = True
+    validation_errors = []
+
+    # 1. Verify every directory exists
+    for d_path in directories_created:
+        full_d_path = os.path.join(project_path, d_path)
+        if not os.path.exists(full_d_path) or not os.path.isdir(full_d_path):
+            validation_passed = False
+            validation_errors.append(f"Directory missing or invalid: {d_path}")
+
+    # 2. Verify every file exists
+    all_expected_files = []
+    for category in ("files", "templates", "static_resources", "assets"):
+        for f_path in plan.get(category, []):
+            if not f_path or f_path.endswith("/") or f_path.endswith("\\"):
+                continue
+            all_expected_files.append(f_path)
+            
+    # Include bootstrapped files
+    all_expected_files.extend([".gitignore", "LICENSE", "README.md"])
     if dep_file:
-        with open(os.path.join(project_path, dep_file), "w", encoding="utf-8") as f:
-            f.write(dep_content)
-        rprint(f"  [bold green]✓[/bold green] {dep_file}")
+        all_expected_files.append(dep_file)
 
-    # ── Source Code Generation Stage ──────────────────────────────────────────
-    files_to_generate = plan.get("files", [])
-    generated_count = 3 + (1 if dep_file else 0)  # README, gitignore, LICENSE, optional deps
-
-    folders_set = set()
-
-    for f_path in files_to_generate:
-        # Skip bootstrapping / metadata files if they were listed in plan files
+    for f_path in all_expected_files:
+        # Skip bootstrapping / metadata files if they were skipped in actual generation
         if f_path.lower() in ("readme.md", ".gitignore", "license", "requirements.txt", "package.json", "cargo.toml", "go.mod"):
+            # Check if exists
+            full_f_path = os.path.join(project_path, f_path)
+            if not os.path.exists(full_f_path):
+                validation_passed = False
+                validation_errors.append(f"Boilerplate file missing: {f_path}")
             continue
 
         full_f_path = os.path.join(project_path, f_path)
-        os.makedirs(os.path.dirname(full_f_path), exist_ok=True)
-        dir_name = os.path.dirname(f_path)
-        if dir_name:
-            folders_set.add(dir_name)
+        if not os.path.exists(full_f_path):
+            validation_passed = False
+            validation_errors.append(f"Expected file was not generated: {f_path}")
+        elif os.path.isdir(full_f_path):
+            validation_passed = False
+            validation_errors.append(f"File path conflict (exists as directory): {f_path}")
 
-        with console.status(f"[bold yellow]Generating {f_path}...[/bold yellow]", spinner="dots"):
-            code_content = _generate_file_content(provider, plan, f_path)
+    # 3. Check for write failures
+    if files_failed:
+        # If any of the failed files were core files/templates, we mark validation as failed
+        validation_passed = False
+        for f, err in files_failed:
+            validation_errors.append(f"File generation failed: {f} ({err})")
 
-        if code_content:
-            with open(full_f_path, "w", encoding="utf-8") as f:
-                f.write(code_content)
-            rprint(f"  [bold green]✓[/bold green] {f_path}")
-            generated_count += 1
-        else:
-            rprint(f"  [bold red]❌ Failed to generate {f_path}[/bold red]")
+    rprint()
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+    rprint("[bold yellow]               PROJECT VALIDATION              [/bold yellow]")
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+    if validation_passed:
+        rprint("[bold green]✓ Passed[/bold green]")
+    else:
+        rprint("[bold red]Validation Failed[/bold red]")
+        for err in validation_errors:
+            rprint(f"  [red]✗[/red] {err}")
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
 
-    # ── Self-Review & Project Validation ──────────────────────────────────────
-    _review_and_fix_project(provider, project_path, plan)
+    # Display final generation report
+    rprint()
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+    rprint("[bold yellow]               GENERATION REPORT               [/bold yellow]")
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+    
+    rprint("[bold green]Directories Created:[/bold green]")
+    if directories_created:
+        for d in sorted(set(directories_created)):
+            rprint(f"  - {d}")
+    else:
+        rprint("  - None")
+        
+    rprint("[bold green]Files Created:[/bold green]")
+    if files_created:
+        for f in sorted(set(files_created)):
+            rprint(f"  - {f}")
+    else:
+        rprint("  - None")
+        
+    rprint("[bold red]Files Failed:[/bold red]")
+    if files_failed:
+        for f, err in files_failed:
+            rprint(f"  - {f}: [red]{err}[/red]")
+    else:
+        rprint("  - None")
+        
+    rprint("[bold yellow]Missing Assets:[/bold yellow]")
+    if missing_assets:
+        for a in missing_assets:
+            rprint(f"  - {a}")
+    else:
+        rprint("  - None")
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+
+    if not validation_passed:
+        rprint("\n[bold red]❌ Project generation failed validation. Halting pipeline execution without aborting the CLI.[/bold red]")
+        return None
 
     # ── Git Integration ───────────────────────────────────────────────────────
     rprint("\n[bold purple]Initializing Git Repository...[/bold purple]")
     from services.git_service import git_init, git_add, git_commit, git_branch, git_remote_add, git_push
 
-    git_init(project_path)
-    git_add(project_path)
-    git_commit(project_path, "Initial project generated by GitHub Companion")
-    git_branch(project_path, "main")
-    rprint("  [bold green]✓[/bold green] Git Initialized & Initial Commit Created")
+    try:
+        git_init(project_path)
+        git_add(project_path)
+        git_commit(project_path, "Initial project generated by GitHub Companion")
+        git_branch(project_path, "main")
+        rprint("  [bold green]✓[/bold green] Git Initialized & Initial Commit Created")
+    except Exception as e:
+        rprint(f"  [bold red]❌ Git Initialization failed: {e}[/bold red]")
 
     # ── GitHub Integration ────────────────────────────────────────────────────
     published = False
     repo_url = ""
 
+    from services.config_service import get_github_token, get_github_username
     token = get_github_token()
     username = get_github_username()
 
     if token and username:
         from services.github_service import repo_create
         rprint("[bold purple]Creating GitHub repository...[/bold purple]")
-        resp = repo_create(project_name, plan.get("strategy", ""), private=False)
-        if resp.status_code == 201:
-            repo_data = resp.json()
-            repo_url = repo_data["html_url"]
-            remote_url = f"https://{username}@github.com/{username}/{project_name}.git"
+        try:
+            resp = repo_create(project_name, plan.get("strategy", ""), private=False)
+            if resp.status_code == 201:
+                repo_data = resp.json()
+                repo_url = repo_data["html_url"]
+                remote_url = f"https://{username}@github.com/{username}/{project_name}.git"
 
-            git_remote_add(project_path, remote_url)
-            with console.status("[bold yellow]Pushing to GitHub...[/bold yellow]", spinner="dots"):
-                git_push(project_path)
-            rprint("  [bold green]✓[/bold green] GitHub Repository Successfully Created & Pushed")
-            published = True
-        else:
-            rprint(f"  [bold red]❌ Failed to create GitHub repository: {resp.json().get('message', 'Unknown error')}[/bold red]")
+                git_remote_add(project_path, remote_url)
+                with console.status("[bold yellow]Pushing to GitHub...[/bold yellow]", spinner="dots"):
+                    git_push(project_path)
+                rprint("  [bold green]✓[/bold green] GitHub Repository Successfully Created & Pushed")
+                published = True
+            else:
+                rprint(f"  [bold red]❌ Failed to create GitHub repository: {resp.json().get('message', 'Unknown error')}[/bold red]")
+        except Exception as e:
+            rprint(f"  [bold red]❌ GitHub repository push failed: {e}[/bold red]")
     else:
         rprint("[bold yellow]⚠ GitHub credentials not configured. Skipping repository creation & push.[/bold yellow]")
 
+    # ── Launch VS Code ────────────────────────────────────────────────────────
+    import subprocess
+    try:
+        rprint("\n[bold purple]Launching VS Code...[/bold purple]")
+        subprocess.Popen(["code", project_path], shell=True)
+        rprint("  [bold green]✓[/bold green] VS Code launched successfully.")
+    except Exception as e:
+        rprint(f"  [bold red]❌ Could not launch VS Code: {e}[/bold red]")
+
     # ── Final Output Summary ──────────────────────────────────────────────────
-    _display_completion_report(plan, project_path, generated_count, published, repo_url)
+    _display_completion_report(plan, project_path, len(files_created), published, repo_url)
 
     # Create and return active session context
     session = {
@@ -535,9 +730,20 @@ The JSON object must contain the following keys:
     "Challenge 1: short description",
     "Challenge 2: short description"
   ],
+  "directories": [
+    "Relative path of directories to explicitly create, ending with a slash (e.g. src/, src/components/, src/assets/icons/)"
+  ],
   "files": [
-    "Relative path of file to create, e.g., app.py",
-    "Relative path of file to create, e.g., templates/index.html"
+    "Relative path of core code files, excluding directories (e.g., src/index.js, src/App.js)"
+  ],
+  "assets": [
+    "Relative path of graphic assets, icons, or audio resources to generate/track (e.g., src/assets/logo.png)"
+  ],
+  "templates": [
+    "Relative path of markup template files to generate (e.g., public/index.html)"
+  ],
+  "static_resources": [
+    "Relative path of static styles, styles config, or static files to generate (e.g., src/styles/main.css)"
   ],
   "coding_strategy": {
     "build_order": "Build order description",
@@ -1103,14 +1309,17 @@ def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dic
     import re
     rprint("\n[bold purple]🔎 Starting Self-Review & Project Validation...[/bold purple]")
     
-    files = plan.get("files", [])
+    files = []
+    for category in ("files", "templates", "static_resources", "assets"):
+        files.extend(plan.get(category, []))
+        
     for fpath in files:
         # Skip bootstrapping files
         if fpath.lower() in ("readme.md", ".gitignore", "license", "requirements.txt", "package.json", "cargo.toml", "go.mod"):
             continue
 
         full_path = os.path.join(project_path, fpath)
-        if not os.path.exists(full_path):
+        if not os.path.exists(full_path) or os.path.isdir(full_path):
             continue
             
         attempts = 0
