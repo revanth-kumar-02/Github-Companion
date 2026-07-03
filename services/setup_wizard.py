@@ -270,78 +270,36 @@ def run_setup_wizard() -> bool:
     
     print_step_header(3, 4, "Default AI Model Selection")
     
-    if provider == "ollama":
-        rprint("Choose Default Coding Model:\n")
-        rprint("  [bold cyan][1][/bold cyan] Qwen 2.5 Coder ⭐ Recommended")
-        rprint("  [bold cyan][2][/bold cyan] DeepSeek R1")
-        rprint("  [bold cyan][3][/bold cyan] Llama 3.3\n")
-        
-        while True:
-            model_choice = console.input("[bold purple]> [/bold purple]").strip()
-            if model_choice == "1":
-                coding_model = "qwen2.5-coder"
-                break
-            elif model_choice == "2":
-                coding_model = "deepseek-r1"
-                break
-            elif model_choice == "3":
-                coding_model = "llama3.3"
-                break
-            else:
-                rprint("[bold red]❌ Invalid choice. Select 1, 2, or 3.[/bold red]")
-    elif provider == "nvidia":
-        rprint("Choose Default Coding Model:\n")
-        rprint("  [bold cyan][1][/bold cyan] Llama 3.3 70B ⭐ Recommended")
-        rprint("  [bold cyan][2][/bold cyan] Qwen2.5 Instruct")
-        rprint("  [bold cyan][3][/bold cyan] DeepSeek R1\n")
-        
-        while True:
-            model_choice = console.input("[bold purple]> [/bold purple]").strip()
-            if model_choice == "1":
-                coding_model = "llama-3.3-70b"
-                assistant_model = "llama-3.1-nemotron-ultra"
-                reasoning_model = "deepseek-r1"
-                break
-            elif model_choice == "2":
-                coding_model = "qwen2.5-instruct"
-                assistant_model = "qwen2.5-instruct"
-                reasoning_model = "deepseek-r1"
-                break
-            elif model_choice == "3":
-                coding_model = "deepseek-r1"
-                assistant_model = "llama-3.1-nemotron-ultra"
-                reasoning_model = "deepseek-r1"
+    from ai.model_registry import get_models_by_provider
+    
+    prov_models = get_models_by_provider(provider)
+    rprint(f"Select your default model for {provider.upper()}:\n")
+    for idx, m in enumerate(prov_models, start=1):
+        rec_tag = " ⭐ Recommended" if m.get("recommended") else ""
+        rprint(f"  [bold cyan][{idx}][/bold cyan] {m['display_name']} ({m['model_id']}){rec_tag}")
+    rprint()
+    
+    while True:
+        model_choice = console.input("[bold purple]> [/bold purple]").strip()
+        try:
+            val = int(model_choice)
+            if 1 <= val <= len(prov_models):
+                selected = prov_models[val - 1]
+                coding_model = selected["model_id"]
+                assistant_model = selected["model_id"]
+                reasoning_model = selected["model_id"]
+                
+                # Refine assistant/reasoning from provider defaults
+                for m in prov_models:
+                    if m["role"] == "assistant" and m.get("recommended"):
+                        assistant_model = m["model_id"]
+                    if m["role"] == "planning" and m.get("recommended"):
+                        reasoning_model = m["model_id"]
                 break
             else:
-                rprint("[bold red]❌ Invalid choice. Select 1, 2, or 3.[/bold red]")
-    else:
-        # OpenRouter configurations
-        rprint("Choose Default Coding Model:\n")
-        rprint("  [bold cyan][1][/bold cyan] Qwen 2.5 Coder ⭐ Recommended")
-        rprint("  [bold cyan][2][/bold cyan] DeepSeek V3")
-        rprint("  [bold cyan][3][/bold cyan] DeepSeek R1")
-        rprint("  [bold cyan][4][/bold cyan] Llama 3.3\n")
-        
-        while True:
-            model_choice = console.input("[bold purple]> [/bold purple]").strip()
-            if model_choice == "1":
-                coding_model = "qwen2.5-coder"
-                assistant_model = "deepseek-v3"
-                break
-            elif model_choice == "2":
-                coding_model = "deepseek-v3"
-                assistant_model = "deepseek-v3"
-                break
-            elif model_choice == "3":
-                coding_model = "deepseek-r1"
-                assistant_model = "deepseek-v3"
-                break
-            elif model_choice == "4":
-                coding_model = "llama3.3"
-                assistant_model = "deepseek-v3"
-                break
-            else:
-                rprint("[bold red]❌ Invalid choice. Select 1, 2, 3, or 4.[/bold red]")
+                rprint(f"[bold red]❌ Invalid choice. Select 1 to {len(prov_models)}.[/bold red]")
+        except ValueError:
+            rprint(f"[bold red]❌ Invalid choice. Select 1 to {len(prov_models)}.[/bold red]")
                 
     # ── STEP 4: Choose your Workspace Location ─────────────────────────────────
     print_step_header(4, 4, "Choose your Workspace Location")
@@ -490,11 +448,31 @@ def _validate_openrouter_key(api_key: str) -> bool:
 
 
 def _validate_nvidia_key(api_key: str) -> bool:
-    """Verify NVIDIA NIM key validity by hitting its models endpoint."""
+    """Verify NVIDIA NIM key validity by hitting its models endpoint and chat completions endpoint."""
     try:
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "accept": "application/json"
+        }
         resp = requests.get("https://integrate.api.nvidia.com/v1/models", headers=headers, timeout=10)
-        return resp.status_code == 200
+        if resp.status_code != 200:
+            return False
+            
+        # Also try a lightweight ping request to chat completions
+        payload = {
+            "model": "nvidia/llama-3.1-nemotron-51b-instruct",
+            "messages": [{"role": "user", "content": "Ping"}],
+            "max_tokens": 1
+        }
+        resp_chat = requests.post("https://integrate.api.nvidia.com/v1/chat/completions", headers=headers, json=payload, timeout=10)
+        if resp_chat.status_code == 200:
+            return True
+            
+        # Fallback to public free-tier model meta/llama-3.1-8b-instruct if default model is restricted
+        payload["model"] = "meta/llama-3.1-8b-instruct"
+        resp_chat_fallback = requests.post("https://integrate.api.nvidia.com/v1/chat/completions", headers=headers, json=payload, timeout=10)
+        return resp_chat_fallback.status_code == 200
     except Exception:
         return False
 

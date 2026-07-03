@@ -2,6 +2,7 @@
 import subprocess
 import requests
 from rich.console import Console
+from rich.table import Table
 from rich import print as rprint
 
 from services.config_service import (
@@ -188,11 +189,45 @@ def _doctor_ai() -> None:
     nv_configured = "Yes" if nv_key else "No"
     nv_auth = "Present" if nv_key else "Missing"
     nv_ok = False
+    nv_endpoint_ok = False
+    nv_auth_ok = False
+    nv_models_ok = False
+    nv_chat_ok = False
+
     if nv_key:
         with console.status("[bold yellow]Testing NVIDIA NIM...[/bold yellow]", spinner="dots"):
             try:
-                from services.setup_wizard import _validate_nvidia_key
-                nv_ok = _validate_nvidia_key(nv_key)
+                headers = {
+                    "Authorization": f"Bearer {nv_key}",
+                    "Content-Type": "application/json",
+                    "accept": "application/json"
+                }
+                # Check models endpoint reachability and authentication
+                resp = requests.get("https://integrate.api.nvidia.com/v1/models", headers=headers, timeout=10)
+                nv_endpoint_ok = (resp.status_code != 404 and resp.status_code != 502)
+                if resp.status_code == 200:
+                    nv_auth_ok = True
+                    nv_models_ok = True
+                elif resp.status_code == 401:
+                    nv_auth_ok = False
+                
+                # Chat completions endpoint validation
+                payload = {
+                    "model": "nvidia/llama-3.1-nemotron-51b-instruct",
+                    "messages": [{"role": "user", "content": "Ping"}],
+                    "max_tokens": 1
+                }
+                resp_chat = requests.post("https://integrate.api.nvidia.com/v1/chat/completions", headers=headers, json=payload, timeout=10)
+                if resp_chat.status_code == 200:
+                    nv_chat_ok = True
+                else:
+                    # Fallback to public free-tier model meta/llama-3.1-8b-instruct if default model is restricted
+                    payload["model"] = "meta/llama-3.1-8b-instruct"
+                    resp_chat_fallback = requests.post("https://integrate.api.nvidia.com/v1/chat/completions", headers=headers, json=payload, timeout=10)
+                    if resp_chat_fallback.status_code == 200:
+                        nv_chat_ok = True
+                
+                nv_ok = nv_endpoint_ok and nv_auth_ok and nv_models_ok and nv_chat_ok
             except Exception:
                 nv_ok = False
     nv_status = "[bold green]✓ Connected[/bold green]" if nv_ok else ("[bold red]✗ Disconnected[/bold red]" if nv_key else "[dim]Not Configured[/dim]")
@@ -217,4 +252,12 @@ def _doctor_ai() -> None:
 
     console.print(table)
     rprint()
+
+    if nv_key:
+        rprint("[bold white]NVIDIA NIM Detailed Checks:[/bold white]")
+        rprint(f"  {'[green]✓[/green]' if nv_endpoint_ok else '[red]✗[/red]'} Endpoint reachable (https://integrate.api.nvidia.com/v1)")
+        rprint(f"  {'[green]✓[/green]' if nv_auth_ok else '[red]✗[/red]'} Authentication (API key validity)")
+        rprint(f"  {'[green]✓[/green]' if nv_models_ok else '[red]✗[/red]'} Available models metadata query")
+        rprint(f"  {'[green]✓[/green]' if nv_chat_ok else '[red]✗[/red]'} Chat completion endpoint (chat/completions response)")
+        rprint()
 

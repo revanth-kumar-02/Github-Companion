@@ -47,33 +47,34 @@ def get_provider(model_type: str = "assistant") -> "BaseProvider":
     """
     primary_name  = get_ai_provider()
     fallback_name = get_fallback_provider()
+    
+    from ai.model_registry import get_models_by_provider, get_model_by_display_name_or_id
+    
+    # Resolve the model name using the requested model_type (role)
     model_name    = _resolve_model_name(model_type)
 
     if primary_name.lower() == "auto":
         priority = ["ollama", "nvidia", "openrouter"]
-        model_mappings = {
-            "ollama": {
-                "coding": "qwen2.5-coder",
-                "reasoning": "deepseek-r1",
-                "assistant": "llama3.3"
-            },
-            "nvidia": {
-                "coding": "meta/llama-3.3-70b-instruct",
-                "reasoning": "deepseek/deepseek-r1",
-                "assistant": "nvidia/llama-3.1-nemotron-51b-instruct"
-            },
-            "openrouter": {
-                "coding": "deepseek-v3",
-                "reasoning": "qwq-32b-preview",
-                "assistant": "deepseek-v3"
-            }
-        }
         for prov_name in priority:
-            target_model = model_mappings.get(prov_name, {}).get(model_type, model_name)
-            prov = _build_provider(prov_name, target_model)
-            if prov is not None and prov.health_check():
-                rprint(f"[bold green]  ✔  Auto Selected Provider: {prov_name.upper()} ({prov.model})[/bold green]")
-                return prov
+            # Dynamically look up the model for the provider and the required role
+            role_key = "planning" if model_type == "reasoning" else model_type
+            prov_models = get_models_by_provider(prov_name)
+            
+            # Find the match for this role, preferring recommended ones
+            matching_model = None
+            for m in prov_models:
+                if m["role"].lower() == role_key.lower():
+                    if m.get("recommended"):
+                        matching_model = m
+                        break
+                    if matching_model is None:
+                        matching_model = m
+            
+            if matching_model:
+                prov = _build_provider(prov_name, matching_model["model_id"])
+                if prov is not None and prov.health_check():
+                    rprint(f"[bold green]  ✔  Auto Selected Provider: {prov_name.upper()} ({prov.model})[/bold green]")
+                    return prov
         _raise_no_provider("auto (Ollama -> NVIDIA NIM -> OpenRouter)", fallback_name)
 
     # ── Try primary ────────────────────────────────────────────────────────────
@@ -104,7 +105,24 @@ def _resolve_model_name(model_type: str) -> str:
         "reasoning": get_reasoning_model,
         "assistant": get_assistant_model,
     }
-    return mapping.get(model_type, get_assistant_model)()
+    configured_val = mapping.get(model_type, get_assistant_model)()
+    
+    # Fallback to role-based recommended model if not configured
+    from ai.model_registry import get_models_by_role
+    reg_model = get_model_by_display_name_or_id(configured_val)
+    if reg_model:
+        return reg_model["model_id"]
+        
+    role_key = "planning" if model_type == "reasoning" else model_type
+    role_models = get_models_by_role(role_key)
+    for m in role_models:
+        if m.get("recommended"):
+            return m["model_id"]
+            
+    if role_models:
+        return role_models[0]["model_id"]
+        
+    return configured_val
 
 
 def _build_provider(provider_name: str, model_name: str) -> "BaseProvider | None":
@@ -114,6 +132,11 @@ def _build_provider(provider_name: str, model_name: str) -> "BaseProvider | None
     Returns None (rather than raising) so the factory can silently try fallback.
     """
     try:
+        # Resolve via registry if possible
+        from ai.model_registry import get_model_by_display_name_or_id
+        reg_model = get_model_by_display_name_or_id(model_name)
+        resolved_model_id = reg_model["model_id"] if reg_model else model_name
+
         # Check custom models first
         from services.config_service import get_custom_models
         for custom_cfg in get_custom_models():
@@ -123,18 +146,18 @@ def _build_provider(provider_name: str, model_name: str) -> "BaseProvider | None
 
         if provider_name == "ollama":
             from ai.providers.ollama_provider import OllamaProvider
-            return OllamaProvider(model_name=model_name, host=get_ollama_host())
+            return OllamaProvider(model_name=resolved_model_id, host=get_ollama_host())
 
         if provider_name == "openrouter":
             from ai.providers.openrouter_provider import OpenRouterProvider
             key = get_openrouter_api_key()
-            return OpenRouterProvider(model_name=model_name, api_key=key)
+            return OpenRouterProvider(model_name=resolved_model_id, api_key=key)
 
         if provider_name == "nvidia":
             from ai.providers.nvidia_provider import NvidiaProvider
             from services.config_service import get_nvidia_api_key
             key = get_nvidia_api_key()
-            return NvidiaProvider(model_name=model_name, api_key=key)
+            return NvidiaProvider(model_name=resolved_model_id, api_key=key)
 
         rprint(f"[red]  Unknown provider: '{provider_name}'[/red]")
         return None

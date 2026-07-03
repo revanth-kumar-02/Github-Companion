@@ -60,54 +60,66 @@ def _get_ollama_with_fallback(model_id: str) -> BaseProvider | None:
             return None
 
 
-def _get_selected_provider() -> BaseProvider | None:
-    """Show model selection menu and return the corresponding provider."""
-    rprint()
-    rprint("[bold bright_white]Choose Coding Model[/bold bright_white]")
-    rprint("[blue]" + "─" * 47 + "[/blue]")
-    rprint("  [bold cyan]1[/bold cyan]. Qwen 2.5 Coder (Provider: Ollama)")
-    rprint("  [bold cyan]2[/bold cyan]. DeepSeek V3 (Provider: OpenRouter)")
-    rprint("  [bold cyan]3[/bold cyan]. Llama 3.3 70B (Provider: NVIDIA NIM)")
-
-    customs = get_custom_models()
-    for idx, c in enumerate(customs, start=4):
-        rprint(f"  [bold cyan]{idx}[/bold cyan]. {c.get('provider_name')} - {c.get('model_name')} (Custom)")
-
-    rprint()
-
-    choice = console.input("[bold yellow]Select model number : [/bold yellow]").strip()
-
-    if choice == "1":
-        return _get_ollama_with_fallback("qwen2.5-coder")
-
-    elif choice == "2":
+def _build_provider_for_model(model_entry: dict) -> BaseProvider | None:
+    provider_name = model_entry["provider"].lower()
+    model_id = model_entry["model_id"]
+    
+    if provider_name == "ollama":
+        return _get_ollama_with_fallback(model_id)
+        
+    elif provider_name == "openrouter":
         from services.setup_wizard import ensure_openrouter_authenticated
         try:
             key = ensure_openrouter_authenticated()
-            return OpenRouterProvider("deepseek-v3", api_key=key)
+            return OpenRouterProvider(model_id, api_key=key)
         except Exception as e:
             rprint(f"[bold red]❌ Config error: {e}[/bold red]")
             return None
-
-    elif choice == "3":
+            
+    elif provider_name == "nvidia":
         from services.setup_wizard import ensure_nvidia_authenticated
         try:
             key = ensure_nvidia_authenticated()
-            return NvidiaProvider("meta/llama-3.3-70b-instruct", api_key=key)
+            return NvidiaProvider(model_id, api_key=key)
         except Exception as e:
             rprint(f"[bold red]❌ Config error: {e}[/bold red]")
             return None
+            
+    return None
 
-    else:
-        try:
-            val = int(choice)
-            idx = val - 4
+
+def _get_selected_provider() -> BaseProvider | None:
+    """Show model selection menu and return the corresponding provider."""
+    from ai.model_registry import get_models_by_role
+    rprint()
+    rprint("[bold bright_white]Choose Coding Model[/bold bright_white]")
+    rprint("[blue]" + "─" * 47 + "[/blue]")
+    
+    models = get_models_by_role("coding")
+    for idx, m in enumerate(models, start=1):
+        rec_tag = " ⭐ [dim]Recommended[/dim]" if m.get("recommended") else ""
+        rprint(f"  [bold cyan]{idx}[/bold cyan]. {m['display_name']} (Provider: {m['provider'].upper()}){rec_tag}")
+        
+    customs = get_custom_models()
+    start_custom = len(models) + 1
+    for idx, c in enumerate(customs, start=start_custom):
+        rprint(f"  [bold cyan]{idx}[/bold cyan]. {c.get('provider_name')} - {c.get('model_name')} (Custom)")
+        
+    rprint()
+    choice = console.input("[bold yellow]Select model number : [/bold yellow]").strip()
+    
+    try:
+        val = int(choice)
+        if 1 <= val <= len(models):
+            return _build_provider_for_model(models[val - 1])
+        else:
+            idx = val - start_custom
             if 0 <= idx < len(customs):
                 from ai.providers.custom_provider import CustomProvider
                 return CustomProvider(customs[idx])
-        except ValueError:
-            pass
-
+    except ValueError:
+        pass
+        
     return None
 
 
@@ -176,34 +188,31 @@ def start_code_mode() -> None:
 
 def start_plan_mode() -> None:
     """Choose planning model and generate implementation plan (GC > plan)."""
+    from ai.model_registry import get_models_by_role
     rprint()
     rprint("[bold bright_white]Choose Planning Model[/bold bright_white]")
     rprint("[blue]" + "─" * 47 + "[/blue]")
-    rprint("  [bold cyan]1[/bold cyan]. DeepSeek R1 (Provider: NVIDIA NIM)")
-    rprint("  [bold cyan]2[/bold cyan]. QwQ 32B (Provider: OpenRouter)")
+    
+    models = get_models_by_role("planning")
+    for idx, m in enumerate(models, start=1):
+        rec_tag = " ⭐ [dim]Recommended[/dim]" if m.get("recommended") else ""
+        rprint(f"  [bold cyan]{idx}[/bold cyan]. {m['display_name']} (Provider: {m['provider'].upper()}){rec_tag}")
+        
     rprint()
-
     choice = console.input("[bold yellow]Select planning model number : [/bold yellow]").strip()
-
-    provider = None
-    if choice == "1":
-        from services.setup_wizard import ensure_nvidia_authenticated
-        try:
-            key = ensure_nvidia_authenticated()
-            provider = NvidiaProvider("deepseek/deepseek-r1", api_key=key)
-        except Exception as e:
-            rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+    
+    try:
+        val = int(choice)
+        if 1 <= val <= len(models):
+            provider = _build_provider_for_model(models[val - 1])
+        else:
+            error("Invalid selection.")
             return
-    elif choice == "2":
-        from services.setup_wizard import ensure_openrouter_authenticated
-        try:
-            key = ensure_openrouter_authenticated()
-            provider = OpenRouterProvider("qwq-32b-preview", api_key=key)
-        except Exception as e:
-            rprint(f"[bold red]❌ Config error: {e}[/bold red]")
-            return
-    else:
+    except ValueError:
         error("Invalid selection.")
+        return
+        
+    if not provider:
         return
 
     rprint(f"[dim]  Selected: {provider.name} ({provider.model})[/dim]\n")

@@ -4,6 +4,7 @@ from rich.panel import Panel
 from rich import print as rprint
 
 from ai.agent import Agent
+from ai.providers.base_provider import BaseProvider
 from ai.providers.openrouter_provider import OpenRouterProvider
 from ai.providers.nvidia_provider import NvidiaProvider
 from utils.ui import error, success
@@ -83,45 +84,63 @@ def start_ask_mode() -> None:
         rprint()
 
 
-def start_chat_mode() -> None:
-    """Choose assistant model and launch chat session (GC > chat)."""
-    rprint()
-    rprint("[bold bright_white]Assistant Models[/bold bright_white]")
-    rprint("[blue]" + "─" * 47 + "[/blue]")
-    rprint("  [bold cyan]1[/bold cyan]. DeepSeek V3 (Provider: OpenRouter)")
-    rprint("  [bold cyan]2[/bold cyan]. Llama 3.1 Nemotron Ultra (Provider: NVIDIA NIM)")
-    rprint("  [bold cyan]3[/bold cyan]. Qwen2.5 Instruct (Provider: NVIDIA NIM)")
-    rprint()
-
-    choice = console.input("[bold yellow]Select assistant model number : [/bold yellow]").strip()
-
-    selected_provider = None
-    if choice == "1":
+def _build_provider_for_model(model_entry: dict) -> BaseProvider | None:
+    provider_name = model_entry["provider"].lower()
+    model_id = model_entry["model_id"]
+    
+    if provider_name == "ollama":
+        from services.config_service import get_ollama_host
+        from ai.providers.ollama_provider import OllamaProvider
+        return OllamaProvider(model_name=model_id, host=get_ollama_host())
+        
+    elif provider_name == "openrouter":
         from services.setup_wizard import ensure_openrouter_authenticated
         try:
             key = ensure_openrouter_authenticated()
-            selected_provider = OpenRouterProvider("deepseek-v3", api_key=key)
+            return OpenRouterProvider(model_id, api_key=key)
         except Exception as e:
             rprint(f"[bold red]❌ Config error: {e}[/bold red]")
-            return
-    elif choice == "2":
+            return None
+            
+    elif provider_name == "nvidia":
         from services.setup_wizard import ensure_nvidia_authenticated
         try:
             key = ensure_nvidia_authenticated()
-            selected_provider = NvidiaProvider("nvidia/llama-3.1-nemotron-51b-instruct", api_key=key)
+            return NvidiaProvider(model_id, api_key=key)
         except Exception as e:
             rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+            return None
+            
+    return None
+
+
+def start_chat_mode() -> None:
+    """Choose assistant model and launch chat session (GC > chat)."""
+    from ai.model_registry import get_models_by_role
+    rprint()
+    rprint("[bold bright_white]Assistant Models[/bold bright_white]")
+    rprint("[blue]" + "─" * 47 + "[/blue]")
+    
+    models = get_models_by_role("assistant")
+    for idx, m in enumerate(models, start=1):
+        rec_tag = " ⭐ [dim]Recommended[/dim]" if m.get("recommended") else ""
+        rprint(f"  [bold cyan]{idx}[/bold cyan]. {m['display_name']} (Provider: {m['provider'].upper()}){rec_tag}")
+        
+    rprint()
+    choice = console.input("[bold yellow]Select assistant model number : [/bold yellow]").strip()
+    
+    try:
+        val = int(choice)
+        if 1 <= val <= len(models):
+            selected_provider = _build_provider_for_model(models[val - 1])
+        else:
+            error("Invalid selection.")
             return
-    elif choice == "3":
-        from services.setup_wizard import ensure_nvidia_authenticated
-        try:
-            key = ensure_nvidia_authenticated()
-            selected_provider = NvidiaProvider("qwen/qwen2.5-72b-instruct", api_key=key)
-        except Exception as e:
-            rprint(f"[bold red]❌ Config error: {e}[/bold red]")
-            return
-    else:
+    except ValueError:
         error("Invalid selection.")
+        return
+
+    if not selected_provider:
         return
 
     rprint(f"[dim]  Selected: {selected_provider.name} ({selected_provider.model})[/dim]\n")

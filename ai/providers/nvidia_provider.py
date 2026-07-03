@@ -17,16 +17,7 @@ from ai.providers.base_provider import BaseProvider
 from services.config_service import CONFIG_PATH
 
 
-_MODEL_MAP = {
-    "deepseek-r1": "deepseek/deepseek-r1",
-    "llama-3.1-nemotron-ultra": "nvidia/llama-3.1-nemotron-51b-instruct",
-    "llama-3.3-70b": "meta/llama-3.3-70b-instruct",
-    "qwen2.5-instruct": "qwen/qwen2.5-72b-instruct"
-}
-
-_NO_TOOLS_MODELS: tuple[str, ...] = (
-    "deepseek/deepseek-r1",
-)
+from ai.model_registry import get_model_by_display_name_or_id, get_models_by_provider
 
 
 class NvidiaProvider(BaseProvider):
@@ -36,7 +27,14 @@ class NvidiaProvider(BaseProvider):
 
     def __init__(self, model_name: str, api_key: str):
         self._logical_model = model_name
-        self._model         = _MODEL_MAP.get(model_name, model_name)
+        
+        # Resolve name via model registry
+        reg_model = get_model_by_display_name_or_id(model_name)
+        if reg_model:
+            self._model = reg_model["model_id"]
+        else:
+            self._model = model_name
+
         self._api_key       = api_key
 
         debug_mode = (
@@ -82,12 +80,11 @@ class NvidiaProvider(BaseProvider):
 
         headers = {
             "Content-Type": "application/json",
+            "accept": "application/json",
         }
         
-        auth_present = False
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-            auth_present = True
 
         payload = {
             "model": self._model,
@@ -105,26 +102,17 @@ class NvidiaProvider(BaseProvider):
         )
 
         if debug_mode:
-            masked_key = f"Bearer {first_8}" + "*" * (api_key_len - 8) if api_key else "None"
-            rprint()
-            rprint("====================================================")
-            rprint(f"Configuration Path          : {CONFIG_PATH}")
-            rprint(f"Provider                    : NVIDIA NIM")
-            rprint(f"Model                       : {self._model}")
-            rprint(f"API Key Exists              : {api_key_exists}")
-            rprint(f"API Key Length              : {api_key_len}")
-            rprint(f"Provider Received API Key   : {first_8}...")
-            rprint(f"Provider Stored API Key     : {first_8}...")
-            rprint(f"Authorization Header Exists : {auth_present}")
-            rprint(f"Authorization Header        : {masked_key}")
-            rprint(f"Endpoint                    : {endpoint}")
-            rprint("====================================================")
-            rprint("Request")
-            rprint(f"URL: {endpoint}")
-            rprint(f"Model: {self._model}")
-            rprint(f"Messages: {json.dumps(messages, indent=2)}")
-            rprint("====================================================")
-            rprint()
+            masked_headers = dict(headers)
+            if "Authorization" in masked_headers:
+                masked_headers["Authorization"] = f"Bearer {first_8}" + "*" * (api_key_len - 8) if api_key_len >= 8 else "Bearer ********"
+            rprint("\n[bold yellow]=== NVIDIA Request Diagnostics (DEBUG) ===[/bold yellow]")
+            rprint(f"Provider:      NVIDIA NIM")
+            rprint(f"Base URL:      {self.BASE_URL}")
+            rprint(f"Full Endpoint: {endpoint}")
+            rprint(f"Model ID:      {self._model}")
+            rprint(f"Headers:       {json.dumps(masked_headers, indent=2)}")
+            rprint(f"Payload:       {json.dumps(payload, indent=2)}")
+            rprint("[bold yellow]==========================================[/bold yellow]\n")
 
         import time
         max_retries = 3
@@ -146,36 +134,71 @@ class NvidiaProvider(BaseProvider):
                 break
             except Exception as exc:
                 if attempt == max_retries - 1:
-                    raise RuntimeError(f"NVIDIA NIM request failed: {exc}")
+                    raise RuntimeError(
+                        f"[bold red]❌ NVIDIA NIM connection failed[/bold red]\n"
+                        f"  Endpoint Used: {endpoint}\n"
+                        f"  Model Used   : {self._model}\n"
+                        f"  Error        : {exc}"
+                    )
                 rprint(f"[bold yellow]  ⚠  Connection error. Retrying in {backoff}s...[/bold yellow]")
                 time.sleep(backoff)
                 backoff *= 2
 
         if resp is None:
-            raise RuntimeError("NVIDIA NIM request failed with empty response.")
+            raise RuntimeError(
+                f"[bold red]❌ NVIDIA NIM request failed[/bold red]\n"
+                f"  Endpoint Used: {endpoint}\n"
+                f"  Model Used   : {self._model}\n"
+                f"  Error        : Empty response returned from server"
+            )
 
         if debug_mode:
-            rprint("====================================================")
-            rprint(f"HTTP Status: {resp.status_code}")
-            rprint(f"Response Headers: {dict(resp.headers)}")
-            rprint(f"Response Body: {resp.text}")
-            rprint("====================================================")
-            rprint()
+            rprint("\n[bold yellow]=== NVIDIA Response Diagnostics (DEBUG) ===[/bold yellow]")
+            rprint(f"Status Code:      {resp.status_code}")
+            rprint(f"Response Headers: {json.dumps(dict(resp.headers), indent=2)}")
+            rprint(f"Raw Response Body:\n{resp.text}")
+            rprint("[bold yellow]===========================================[/bold yellow]\n")
 
-        if resp.status_code == 401:
+        # Check HTTP status code
+        if resp.status_code != 200:
             raise RuntimeError(
-                "[bold red]NVIDIA NIM authentication failed.[/bold red]\n"
-                "Please verify your NVIDIA API Key is correct and active."
+                f"[bold red]❌ NVIDIA NIM Request Failed[/bold red]\n"
+                f"  HTTP Status  : {resp.status_code}\n"
+                f"  Endpoint Used: {endpoint}\n"
+                f"  Model Used   : {self._model}\n"
+                f"  Response Body: {resp.text}\n"
+            )
+
+        is_json = "application/json" in resp.headers.get("Content-Type", "").lower()
+        if not is_json:
+            raise RuntimeError(
+                f"[bold red]❌ NVIDIA NIM Response is not JSON[/bold red]\n"
+                f"  HTTP Status  : {resp.status_code}\n"
+                f"  Endpoint Used: {endpoint}\n"
+                f"  Model Used   : {self._model}\n"
+                f"  Response Body: {resp.text}\n"
             )
 
         try:
             data = resp.json()
-        except Exception:
-            raise RuntimeError(f"NVIDIA NIM response is not valid JSON. HTTP {resp.status_code}: {resp.text}")
+        except Exception as parse_err:
+            raise RuntimeError(
+                f"[bold red]❌ NVIDIA NIM JSON Parsing Failed[/bold red]\n"
+                f"  HTTP Status  : {resp.status_code}\n"
+                f"  Endpoint Used: {endpoint}\n"
+                f"  Model Used   : {self._model}\n"
+                f"  Parse Error  : {parse_err}\n"
+                f"  Response Body: {resp.text}\n"
+            )
 
         if "error" in data:
             err_msg = data["error"].get("message", "Unknown NVIDIA NIM error")
-            raise RuntimeError(f"NVIDIA NIM API error: {err_msg}")
+            raise RuntimeError(
+                f"[bold red]❌ NVIDIA NIM API Error[/bold red]\n"
+                f"  Endpoint Used: {endpoint}\n"
+                f"  Model Used   : {self._model}\n"
+                f"  Error Message: {err_msg}\n"
+            )
 
         try:
             choices = data["choices"]
@@ -202,19 +225,43 @@ class NvidiaProvider(BaseProvider):
             raise RuntimeError(f"Failed to parse NVIDIA NIM response: {parse_err}. Raw body: {data}")
 
     def list_models(self) -> list[str]:
-        return list(_MODEL_MAP.keys())
+        return [m["model_id"] for m in get_models_by_provider("nvidia")]
 
     def health_check(self) -> bool:
-        """Perform key validation against models endpoint."""
+        """
+        Thorough health check validating:
+        1. Base URL / endpoint reachability
+        2. Authentication
+        3. Available models list
+        4. Chat completions endpoint responsiveness (using a minimal max_tokens=1 request)
+        """
         if not self._api_key or self._api_key in ("YOUR_NVIDIA_KEY_HERE", "", "YOUR_KEY"):
             return False
         try:
-            headers = {"Authorization": f"Bearer {self._api_key}"}
-            # Fetch simple model check
-            resp = requests.get(f"{self.BASE_URL}/models", headers=headers, timeout=10)
-            return resp.status_code == 200
+            headers = {
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+                "accept": "application/json"
+            }
+            # 1 & 2 & 3. Fetch simple model check (reachable and auth check)
+            resp_models = requests.get(f"{self.BASE_URL}/models", headers=headers, timeout=10)
+            if resp_models.status_code != 200:
+                return False
+                
+            # 4. Chat completion endpoint responsiveness
+            chat_url = f"{self.BASE_URL}/chat/completions"
+            payload = {
+                "model": self._model,
+                "messages": [{"role": "user", "content": "Ping"}],
+                "max_tokens": 1
+            }
+            resp_chat = requests.post(chat_url, headers=headers, json=payload, timeout=10)
+            return resp_chat.status_code == 200
         except Exception:
             return False
 
     def supports_tools(self) -> bool:
-        return not any(self._model.startswith(m) for m in _NO_TOOLS_MODELS)
+        reg_model = get_model_by_display_name_or_id(self._model)
+        if reg_model:
+            return reg_model.get("supports_tools", False)
+        return True

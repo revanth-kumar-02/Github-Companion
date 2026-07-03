@@ -216,27 +216,24 @@ def _config_ai() -> None:
                     else:
                         error("Invalid NVIDIA API key.")
         elif choice == "3":
+            from ai.model_registry import get_models_by_role
             rprint("\nSelect Default Coding Model:")
-            rprint("  1. Qwen 2.5 Coder (Ollama)")
-            rprint("  2. DeepSeek V3 (OpenRouter)")
-            rprint("  3. DeepSeek R1 (NVIDIA)")
-            rprint("  4. Llama 3.3 70B (NVIDIA)")
-            rprint("  5. Llama 3.1 Nemotron Ultra (NVIDIA)")
-            rprint("  6. Qwen2.5 Instruct (NVIDIA)")
+            coding_models = get_models_by_role("coding")
+            for idx, m in enumerate(coding_models, start=1):
+                rec_tag = " ⭐" if m.get("recommended") else ""
+                rprint(f"  {idx}. {m['display_name']} ({m['provider'].upper()}){rec_tag}")
+            
             m_choice = console.input("> ").strip()
-            models_map = {
-                "1": "qwen2.5-coder",
-                "2": "deepseek-v3",
-                "3": "deepseek-r1",
-                "4": "llama-3.3-70b",
-                "5": "llama-3.1-nemotron-ultra",
-                "6": "qwen2.5-instruct"
-            }
-            if m_choice in models_map:
-                settings["coding_model"] = models_map[m_choice]
-                save_settings(settings)
-                success(f"Default coding model set to {models_map[m_choice]}.")
-            else:
+            try:
+                val = int(m_choice)
+                if 1 <= val <= len(coding_models):
+                    selected_model = coding_models[val - 1]
+                    settings["coding_model"] = selected_model["model_id"]
+                    save_settings(settings)
+                    success(f"Default coding model set to {selected_model['display_name']} ({selected_model['model_id']}).")
+                else:
+                    error("Invalid choice.")
+            except ValueError:
                 error("Invalid choice.")
         elif choice == "4":
             from commands.auth import _test_connections
@@ -248,15 +245,15 @@ def _config_ai() -> None:
             table.add_column("Provider", style="green")
             table.add_column("Model ID", style="white")
             table.add_column("Role", style="magenta")
-            table.add_column("Rating", style="yellow")
+            table.add_column("Recommended", style="yellow")
             table.add_column("Tools", style="white")
             for m in MODELS:
                 table.add_row(
-                    m["name"],
+                    m["display_name"],
                     m["provider"].upper(),
                     m["model_id"],
                     m["role"],
-                    m["recommended"],
+                    "Yes" if m["recommended"] else "No",
                     "Yes" if m["supports_tools"] else "No"
                 )
             console.print(table)

@@ -21,27 +21,7 @@ from ai.providers.base_provider import BaseProvider
 from services.config_service import CONFIG_PATH
 
 
-# Mapping from logical model names (used in settings.json) to OpenRouter model IDs.
-# Users configure short names; this map handles the provider-specific format.
-_MODEL_MAP: dict[str, str] = {
-    # Coding models
-    "qwen2.5-coder":      "qwen/qwen2.5-coder-32b-instruct",
-    "codellama":          "meta-llama/codellama-70b-instruct",
-    # Reasoning models
-    "deepseek-r1":        "deepseek/deepseek-r1",
-    # Assistant / general models
-    "deepseek-v3":        "deepseek/deepseek-chat-v3-0324",
-    "llama3.3":           "meta-llama/llama-3.3-70b-instruct",
-    "llama3.1":           "meta-llama/llama-3.1-70b-instruct",
-    "mistral":            "mistralai/mistral-7b-instruct",
-    "mixtral":            "mistralai/mixtral-8x7b-instruct",
-    "qwen":               "qwen/qwen-72b-chat",
-}
-
-# Models that do NOT reliably support tool/function calling on OpenRouter.
-_NO_TOOLS_MODELS: tuple[str, ...] = (
-    "deepseek/deepseek-r1",  # Chain-of-thought model; tool calling not reliable
-)
+from ai.model_registry import get_model_by_display_name_or_id, get_models_by_provider
 
 
 class OpenRouterProvider(BaseProvider):
@@ -61,9 +41,14 @@ class OpenRouterProvider(BaseProvider):
         except ImportError:
             raise RuntimeError("openai package not installed. Run: pip install openai")
 
-        # Resolve logical name → OpenRouter model ID (fall through if already an ID)
+        # Resolve name via model registry
         self._logical_model = model_name
-        self._model         = _MODEL_MAP.get(model_name, model_name)
+        reg_model = get_model_by_display_name_or_id(model_name)
+        if reg_model:
+            self._model = reg_model["model_id"]
+        else:
+            self._model = model_name
+
         self._api_key       = api_key
         self._client        = _OpenAI(base_url=self.BASE_URL, api_key=api_key)
 
@@ -244,7 +229,7 @@ Possible causes:
 
     def list_models(self) -> list[str]:
         """Return the logical model names available via OpenRouter."""
-        return list(_MODEL_MAP.keys())
+        return [m["model_id"] for m in get_models_by_provider("openrouter")]
 
     def health_check(self) -> bool:
         """Return True if a valid (non-placeholder) API key is configured."""
@@ -255,4 +240,7 @@ Possible causes:
 
     def supports_tools(self) -> bool:
         """Return True if the selected model reliably supports tool calling."""
-        return not any(self._model.startswith(m) for m in _NO_TOOLS_MODELS)
+        reg_model = get_model_by_display_name_or_id(self._model)
+        if reg_model:
+            return reg_model.get("supports_tools", False)
+        return True
