@@ -163,7 +163,9 @@ def start_code_mode() -> None:
         action = console.input("[bold yellow]Select option (Y/E/R/N) : [/bold yellow]").strip().upper()
 
         if action == "Y":
-            _execute_approved_plan(provider, plan)
+            session = _execute_approved_plan(provider, plan)
+            if session:
+                _run_coding_session(provider, session)
             break
         elif action == "N":
             rprint("[dim]  Cancelled by user.[/dim]")
@@ -241,7 +243,9 @@ def start_plan_mode() -> None:
         action = console.input("[bold yellow]Select option (Y/E/R/N) : [/bold yellow]").strip().upper()
 
         if action == "Y":
-            _execute_approved_plan(provider, plan)
+            session = _execute_approved_plan(provider, plan)
+            if session:
+                _run_coding_session(provider, session)
             break
         elif action == "N":
             rprint("[dim]  Cancelled by user.[/dim]")
@@ -264,14 +268,14 @@ def start_plan_mode() -> None:
             error("Invalid option.")
 
 
-def _execute_approved_plan(provider: BaseProvider, plan: dict) -> None:
+def _execute_approved_plan(provider: BaseProvider, plan: dict) -> dict | None:
     """Execute code generation and bootstrapping after plan approval."""
     rprint()
     project_name = plan.get("project_name", "my-project")
     original_folder_name = _clean_project_folder_name(project_name)
     folder_name = original_folder_name
 
-    from services.config_service import get_default_workspace
+    from services.config_service import get_default_workspace, get_github_token, get_github_username
     workspace_path = get_default_workspace()
     if not workspace_path:
         home = os.path.expanduser("~")
@@ -311,10 +315,10 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> None:
                 project_path = os.path.join(workspace_path, folder_name)
             else:
                 rprint("[bold red]❌ Invalid name. Cancelling build.[/bold red]")
-                return
+                return None
         else:
             rprint("[dim]  Build cancelled.[/dim]")
-            return
+            return None
 
     rprint()
     rprint("[bold bright_white]Project Location Display[/bold bright_white]")
@@ -402,17 +406,16 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> None:
     published = False
     repo_url = ""
 
-    rprint()
-    publish_choice = console.input("[bold yellow]Publish this project to GitHub? (y/n) : [/bold yellow]").strip().lower()
+    token = get_github_token()
+    username = get_github_username()
 
-    if publish_choice == "y":
+    if token and username:
         from services.github_service import repo_create
         rprint("[bold purple]Creating GitHub repository...[/bold purple]")
         resp = repo_create(project_name, plan.get("strategy", ""), private=False)
         if resp.status_code == 201:
             repo_data = resp.json()
             repo_url = repo_data["html_url"]
-            username = get_github_username()
             remote_url = f"https://{username}@github.com/{username}/{project_name}.git"
 
             git_remote_add(project_path, remote_url)
@@ -422,35 +425,25 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> None:
             published = True
         else:
             rprint(f"  [bold red]❌ Failed to create GitHub repository: {resp.json().get('message', 'Unknown error')}[/bold red]")
+    else:
+        rprint("[bold yellow]⚠ GitHub credentials not configured. Skipping repository creation & push.[/bold yellow]")
 
     # ── Final Output Summary ──────────────────────────────────────────────────
     _display_completion_report(plan, project_path, generated_count, published, repo_url)
 
-    # ── Open Options ──────────────────────────────────────────────────────────
-    rprint()
-    open_choice = console.input("[bold yellow]Open Project folder? (y/n) : [/bold yellow]").strip().lower()
-    if open_choice in ("y", "yes"):
-        import platform
-        import subprocess
-        try:
-            if platform.system() == "Windows":
-                os.startfile(project_path)
-            elif platform.system() == "Darwin":
-                subprocess.Popen(["open", project_path])
-            else:
-                subprocess.Popen(["xdg-open", project_path])
-            success("Project folder opened.")
-        except Exception as e:
-            error(f"Could not open folder: {e}")
-
-    code_choice = console.input("[bold yellow]Open in VS Code? (y/n) : [/bold yellow]").strip().lower()
-    if code_choice in ("y", "yes"):
-        import subprocess
-        try:
-            subprocess.Popen(["code", project_path], shell=True)
-            success("VS Code launched.")
-        except Exception as e:
-            error(f"Could not open in VS Code: {e}")
+    # Create and return active session context
+    session = {
+        "project_name": project_name,
+        "workspace_path": project_path,
+        "repo_url": repo_url,
+        "branch": "main",
+        "framework": plan.get("tech_stack", {}).get("framework", "N/A"),
+        "language": plan.get("tech_stack", {}).get("language", "N/A"),
+        "conversation_history": [],
+        "modified_files": [],
+        "pending_changes": []
+    }
+    return session
 
 
 
@@ -1226,6 +1219,376 @@ def _format_readme_dependencies(dependencies: list) -> str:
                 else:
                     lines.append(f"- {name}")
     return "\n".join(lines)
+
+
+# ── Persistent Coding Session Loops and Helpers ────────────────────────────────
+
+def _run_coding_session(provider: BaseProvider, session: dict) -> None:
+    """Run the persistent coding session loop."""
+    rprint()
+    rprint("[bold green]✓ Project Created[/bold green]")
+    rprint("[bold green]✓ Local Workspace Ready[/bold green]")
+    rprint("[bold green]✓ Git Initialized[/bold green]")
+    if session.get("repo_url"):
+        rprint("[bold green]✓ Repository Created[/bold green]")
+    else:
+        rprint("[bold yellow]- Repository Created (Local Only)[/bold yellow]")
+    rprint("[bold green]✓ Changes Committed[/bold green]")
+    if session.get("repo_url"):
+        rprint("[bold green]✓ Repository Pushed[/bold green]")
+    else:
+        rprint("[bold yellow]- Repository Pushed (Local Only)[/bold yellow]")
+    
+    rprint()
+    rprint(f"[bold cyan]Current Project :[/bold cyan] {session['project_name']}")
+    rprint(f"[bold cyan]Repository URL  :[/bold cyan] {session['repo_url'] or 'N/A'}")
+    rprint(f"[bold cyan]Workspace Path  :[/bold cyan] {session['workspace_path']}")
+    rprint(f"[bold cyan]Branch          :[/bold cyan] {session['branch']}")
+    rprint(f"[bold cyan]Framework       :[/bold cyan] {session['framework']}")
+    rprint(f"[bold cyan]Language        :[/bold cyan] {session['language']}")
+    rprint()
+    rprint("I'm still connected to this project.\n")
+    rprint("You can continue asking for changes, new features, bug fixes, refactoring, documentation, testing, or deployment.\n")
+    rprint("Type 'over' to leave the coding session.\n")
+
+    from services.git_service import git_add, git_commit, git_push
+
+    while True:
+        prompt = console.input("[bold yellow]GC (Coding Session) > [/bold yellow]").strip()
+        if not prompt:
+            continue
+        
+        # Check termination condition
+        if prompt.lower() in ("over", "over coding session"):
+            rprint("[bold cyan]Exiting coding session. Goodbye![/bold cyan]")
+            break
+            
+        # Process coding prompt
+        plan = _handle_coding_prompt(provider, session, prompt)
+        if not plan:
+            continue
+            
+        # Interactive loop choices
+        session_ended = False
+        while not session_ended:
+            rprint("\n[bold yellow]Would you like to:[/bold yellow]")
+            rprint("  [bold cyan]1[/bold cyan]. Continue Coding")
+            rprint("  [bold cyan]2[/bold cyan]. Commit")
+            rprint("  [bold cyan]3[/bold cyan]. Commit & Push")
+            rprint("  [bold cyan]4[/bold cyan]. Undo Last Change")
+            rprint("  [bold cyan]5[/bold cyan]. Explain Changes")
+            rprint("  [bold cyan]6[/bold cyan]. Exit Coding Session")
+            rprint()
+            
+            choice = console.input("[bold yellow]Select option (1-6) : [/bold yellow]").strip()
+            if choice == "1":
+                break
+            elif choice == "2":
+                commit_msg = console.input(f"[bold yellow]Commit message [{plan.get('commit_suggestion')}]: [/bold yellow]").strip()
+                if not commit_msg:
+                    commit_msg = plan.get("commit_suggestion") or "Updates in coding session"
+                git_add(session["workspace_path"])
+                git_commit(session["workspace_path"], commit_msg)
+                rprint("[bold green]✓ Changes committed successfully.[/bold green]")
+                rprint("\n[bold green]Git Status:[/bold green]")
+                rprint(get_git_status_in_dir(session["workspace_path"]))
+            elif choice == "3":
+                commit_msg = console.input(f"[bold yellow]Commit message [{plan.get('commit_suggestion')}]: [/bold yellow]").strip()
+                if not commit_msg:
+                    commit_msg = plan.get("commit_suggestion") or "Updates in coding session"
+                git_add(session["workspace_path"])
+                git_commit(session["workspace_path"], commit_msg)
+                rprint("[bold green]✓ Changes committed successfully.[/bold green]")
+                with console.status("[bold yellow]Pushing changes to GitHub...[/bold yellow]", spinner="dots"):
+                    git_push(session["workspace_path"])
+                rprint("[bold green]✓ Changes pushed to GitHub successfully.[/bold green]")
+            elif choice == "4":
+                git_undo_changes(session["workspace_path"])
+                rprint("[bold green]✓ Discarded all unstaged changes and restored workspace to last commit.[/bold green]")
+                rprint("\n[bold green]Git Status:[/bold green]")
+                rprint(get_git_status_in_dir(session["workspace_path"]))
+                break # Break inner loop to prompt again
+            elif choice == "5":
+                _explain_session_changes(provider, session, prompt, plan)
+            elif choice == "6":
+                session_ended = True
+            else:
+                rprint("[bold red]Invalid option. Please choose 1-6.[/bold red]")
+                
+        if session_ended:
+            break
+
+
+def _handle_coding_prompt(provider: BaseProvider, session: dict, user_request: str) -> dict | None:
+    # 1. Ask AI to plan file operations
+    workspace_files = _get_workspace_files_list(session["workspace_path"])
+    files_str = "\n".join(f"- {f}" for f in workspace_files)
+    
+    # Format conversation history
+    history_str = ""
+    for msg in session["conversation_history"]:
+        role = msg["role"]
+        content = msg["content"]
+        history_str += f"{role.upper()}: {content}\n"
+        
+    system_prompt = f"""\
+You are an expert AI Coding Agent. The user wants to modify an existing project.
+Project Context:
+- Project Name: {session['project_name']}
+- Framework: {session['framework']}
+- Language: {session['language']}
+- Workspace Path: {session['workspace_path']}
+- Branch: {session['branch']}
+
+Current Files in Project:
+{files_str}
+
+Conversation History:
+{history_str}
+
+Analyze the user's request: '{user_request}' and determine which files need to be created, modified, or deleted.
+You MUST return ONLY a JSON code block specifying these file operations.
+Do not output any introductory or conversational text, just the JSON block.
+
+The JSON object must contain the following keys:
+{{
+  "files_to_create": ["relative/path/to/new_file"],
+  "files_to_modify": ["relative/path/to/existing_file"],
+  "files_to_delete": ["relative/path/to/delete_file"],
+  "explanation": "Brief explanation of what changes will be made",
+  "commit_suggestion": "Short, conventional commit message suggestion"
+}}
+"""
+    with console.status("[bold yellow]Planning changes...[/bold yellow]", spinner="dots"):
+        try:
+            msg = provider.generate([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_request}
+            ])
+            content = msg.content or ""
+            plan = _parse_json_block(content)
+        except Exception as exc:
+            error(f"Error during planning: {exc}")
+            return None
+
+    if not plan:
+        error("Failed to parse changes plan from AI.")
+        return None
+
+    # Print planned explanation
+    rprint(f"\n[bold purple]AI Plan:[/bold purple] {plan.get('explanation')}")
+
+    files_created = []
+    files_modified = []
+    files_deleted = []
+
+    # Process deletes
+    for f_path in plan.get("files_to_delete", []):
+        if not f_path:
+            continue
+        full_path = os.path.join(session["workspace_path"], f_path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+            files_deleted.append(f_path)
+            rprint(f"  [bold red]Del[/bold red] {f_path}")
+
+    # Process creates
+    for f_path in plan.get("files_to_create", []):
+        if not f_path:
+            continue
+        full_path = os.path.join(session["workspace_path"], f_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
+        with console.status(f"[bold yellow]Generating {f_path}...[/bold yellow]", spinner="dots"):
+            content = _generate_session_file_create(provider, session, f_path, plan)
+        if content is not None:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            files_created.append(f_path)
+            rprint(f"  [bold green]New[/bold green] {f_path}")
+
+    # Process modifies
+    for f_path in plan.get("files_to_modify", []):
+        if not f_path:
+            continue
+        full_path = os.path.join(session["workspace_path"], f_path)
+        if not os.path.exists(full_path):
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            current_content = ""
+        else:
+            with open(full_path, "r", encoding="utf-8") as f:
+                current_content = f.read()
+                
+        with console.status(f"[bold yellow]Modifying {f_path}...[/bold yellow]", spinner="dots"):
+            content = _generate_session_file_modify(provider, session, f_path, current_content, user_request, plan)
+        if content is not None:
+            with open(full_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            files_modified.append(f_path)
+            rprint(f"  [bold blue]Mod[/bold blue] {f_path}")
+
+    # ── Self-Review & Project Validation ──────────────────────────────────────
+    _review_and_fix_project(provider, session["workspace_path"], {"files": files_created + files_modified})
+
+    # Update session details
+    session["conversation_history"].append({"role": "user", "content": user_request})
+    session["conversation_history"].append({"role": "assistant", "content": plan.get("explanation", "")})
+    
+    for f in files_created:
+        if f not in session["modified_files"]:
+            session["modified_files"].append(f)
+    for f in files_modified:
+        if f not in session["modified_files"]:
+            session["modified_files"].append(f)
+            
+    # Display summary report
+    rprint()
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+    rprint("[bold yellow]             IMPLEMENTATION SUMMARY            [/bold yellow]")
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+    
+    rprint("[bold green]Files Created:[/bold green]")
+    if files_created:
+        for f in files_created:
+            rprint(f"  - {f}")
+    else:
+        rprint("  - None")
+        
+    rprint("[bold green]Files Modified:[/bold green]")
+    if files_modified:
+        for f in files_modified:
+            rprint(f"  - {f}")
+    else:
+        rprint("  - None")
+        
+    rprint("[bold green]Files Deleted:[/bold green]")
+    if files_deleted:
+        for f in files_deleted:
+            rprint(f"  - {f}")
+    else:
+        rprint("  - None")
+        
+    rprint(f"\n[bold green]Commit Message Suggestion:[/bold green] {plan.get('commit_suggestion', 'Updates')}")
+    rprint("\n[bold green]Git Status:[/bold green]")
+    rprint(get_git_status_in_dir(session["workspace_path"]))
+    rprint("[bold yellow]───────────────────────────────────────────────[/bold yellow]")
+    
+    return plan
+
+
+def _generate_session_file_create(provider: BaseProvider, session: dict, f_path: str, plan: dict) -> str:
+    system_prompt = f"""\
+You are an expert Software Engineer.
+You are creating the new file '{f_path}' for the project '{session['project_name']}'.
+Framework: {session['framework']}
+Language: {session['language']}
+Workspace Path: {session['workspace_path']}
+Planned changes: {plan.get('explanation')}
+
+Write the COMPLETE, production-ready, fully functional source code for the file: '{f_path}'.
+- You MUST write the complete implementation logic. DO NOT use 'pass', placeholder comments, 'TODO', or ellipses (...).
+- Do NOT output any explanations, diffs, or discussions.
+- Output ONLY the raw file content. If you use markdown code block wrapping, write only the code block. We will parse it.
+"""
+    prompt = f"Generate code for the new file: {f_path}"
+    try:
+        msg = provider.generate([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ])
+        content = msg.content or ""
+        return _extract_code_content(content)
+    except Exception as e:
+        error(f"Error generating file {f_path}: {e}")
+        return ""
+
+
+def _generate_session_file_modify(provider: BaseProvider, session: dict, f_path: str, current_content: str, user_request: str, plan: dict) -> str:
+    system_prompt = f"""\
+You are an expert Software Engineer.
+You are modifying the existing file '{f_path}' for the project '{session['project_name']}'.
+Framework: {session['framework']}
+Language: {session['language']}
+Workspace Path: {session['workspace_path']}
+Planned changes: {plan.get('explanation')}
+
+Here is the current content of '{f_path}':
+==================================================
+{current_content}
+==================================================
+
+Rewrite the file completely to incorporate the user's request: '{user_request}'
+- Write the COMPLETE, updated, production-ready source code.
+- DO NOT use placeholders, 'pass', or ellipses (...).
+- Do NOT output any explanations or diffs. Output only the updated file content.
+- Output ONLY the raw file content. If you use markdown code block wrapping, write only the code block. We will parse it.
+"""
+    prompt = f"Generate modified code for the file: {f_path}"
+    try:
+        msg = provider.generate([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ])
+        content = msg.content or ""
+        return _extract_code_content(content)
+    except Exception as e:
+        error(f"Error modifying file {f_path}: {e}")
+        return ""
+
+
+def _extract_code_content(content: str) -> str:
+    content = content.strip()
+    if "```" in content:
+        parts = content.split("```")
+        if len(parts) >= 3:
+            code_block = parts[1].strip()
+            lines = code_block.splitlines()
+            if lines and (lines[0].strip().lower() in ("python", "javascript", "typescript", "html", "css", "json", "rust", "go", "bash", "sh")):
+                code_block = "\n".join(lines[1:])
+            return code_block
+    return content
+
+
+def _explain_session_changes(provider: BaseProvider, session: dict, user_request: str, plan: dict) -> None:
+    system_prompt = f"""\
+You are an expert Software Engineer. Explain in detail the changes made to the project files for: '{user_request}'.
+Explain what was added, modified, or removed, and the logic behind it. Keep it structured and clear.
+"""
+    with console.status("[bold yellow]Generating explanation...[/bold yellow]", spinner="dots"):
+        try:
+            msg = provider.generate([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Explain updates for request: {user_request}"}
+            ])
+            explanation = msg.content or "No explanation generated."
+            rprint("\n[bold purple]Explanation of Changes:[/bold purple]")
+            rprint(explanation)
+        except Exception as e:
+            error(f"Error generating explanation: {e}")
+
+
+def _get_workspace_files_list(project_path: str) -> list[str]:
+    file_list = []
+    ignored_dirs = {".git", "node_modules", "__pycache__", "venv", ".venv", "dist", "build"}
+    for root, dirs, files in os.walk(project_path):
+        dirs[:] = [d for d in dirs if d not in ignored_dirs]
+        for f in files:
+            rel_path = os.path.relpath(os.path.join(root, f), project_path)
+            rel_path = rel_path.replace("\\", "/")
+            file_list.append(rel_path)
+    return file_list
+
+
+def get_git_status_in_dir(project_path: str) -> str:
+    import subprocess
+    res = subprocess.run(["git", "status"], cwd=project_path, capture_output=True, text=True)
+    return res.stdout or res.stderr
+
+
+def git_undo_changes(project_path: str) -> None:
+    import subprocess
+    subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=project_path, capture_output=True)
+    subprocess.run(["git", "clean", "-fd"], cwd=project_path, capture_output=True)
 
 
 
