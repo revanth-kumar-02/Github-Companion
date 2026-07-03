@@ -1465,6 +1465,47 @@ def _format_readme_dependencies(dependencies: list) -> str:
 
 # ── Persistent Coding Session Loops and Helpers ────────────────────────────────
 
+def _run_project_tests(session: dict) -> tuple[int, str]:
+    """Run tests or builds depending on tech stack and return exit code and output."""
+    import subprocess
+    import os
+    
+    ws = session["workspace_path"]
+    rprint(f"\n[bold yellow]⚡ Running build/tests in {ws}...[/bold yellow]")
+    
+    cmd = []
+    # Heuristic detection of standard package builders or test frameworks
+    if os.path.exists(os.path.join(ws, "package.json")):
+        cmd = ["npm", "test"]
+    elif os.path.exists(os.path.join(ws, "Cargo.toml")):
+        cmd = ["cargo", "test"]
+    elif os.path.exists(os.path.join(ws, "go.mod")):
+        cmd = ["go", "test", "./..."]
+    elif any(f.endswith(".py") for f in os.listdir(ws) if os.path.isfile(os.path.join(ws, f))):
+        if os.path.exists(os.path.join(ws, "tests")) or os.path.exists(os.path.join(ws, "test")):
+            cmd = ["pytest"]
+        else:
+            if os.path.exists(os.path.join(ws, "main.py")):
+                cmd = ["python", "main.py"]
+            else:
+                cmd = ["python", "-m", "unittest"]
+    else:
+        cmd = ["git", "status"]
+        
+    rprint(f"[dim]Running command: {' '.join(cmd)}[/dim]")
+    res = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, shell=True)
+    
+    output = f"Stdout:\n{res.stdout}\nStderr:\n{res.stderr}"
+    
+    # Fallback if npm test is not configured (common for template projects)
+    if cmd == ["npm", "test"] and "no test specified" in res.stderr.lower():
+        rprint("[dim]npm test not configured. Running npm run build as fallback...[/dim]")
+        res = subprocess.run(["npm", "run", "build"], cwd=ws, capture_output=True, text=True, shell=True)
+        output = f"Stdout:\n{res.stdout}\nStderr:\n{res.stderr}"
+        
+    return res.returncode, output
+
+
 def _run_coding_session(provider: BaseProvider, session: dict) -> None:
     """Run the persistent coding session loop."""
     rprint()
@@ -1520,9 +1561,10 @@ def _run_coding_session(provider: BaseProvider, session: dict) -> None:
             rprint("  [bold cyan]4[/bold cyan]. Undo Last Change")
             rprint("  [bold cyan]5[/bold cyan]. Explain Changes")
             rprint("  [bold cyan]6[/bold cyan]. Exit Coding Session")
+            rprint("  [bold cyan]7[/bold cyan]. Run Build/Test")
             rprint()
             
-            choice = console.input("[bold yellow]Select option (1-6) : [/bold yellow]").strip()
+            choice = console.input("[bold yellow]Select option (1-7) : [/bold yellow]").strip()
             if choice == "1":
                 break
             elif choice == "2":
@@ -1554,8 +1596,34 @@ def _run_coding_session(provider: BaseProvider, session: dict) -> None:
                 _explain_session_changes(provider, session, prompt, plan)
             elif choice == "6":
                 session_ended = True
+            elif choice == "7":
+                ret_code, test_output = _run_project_tests(session)
+                
+                # Show results in Panel
+                color = "green" if ret_code == 0 else "red"
+                title = "✓ Build/Test Passed" if ret_code == 0 else "✗ Build/Test Failed"
+                console.print(Panel(test_output, title=f"[bold {color}]{title}[/bold {color}]", border_style=color))
+                
+                if ret_code != 0:
+                    rprint()
+                    fix_choice = console.input("[bold red]Build/Test failed![/bold red] Would you like the AI to automatically fix these errors? (y/n) [y]: ").strip().lower()
+                    if fix_choice in ("", "y", "yes"):
+                        rprint("\n[bold purple]Auto-Healing Mode Activated: Informing AI about test failures...[/bold purple]")
+                        # Pass test failures directly as a prompt to plan, generate and self-repair!
+                        plan = _handle_coding_prompt(provider, session, f"Fix the build/test failures. Error logs:\n{test_output}")
+                        if plan:
+                            # Re-run build/tests to verify fix!
+                            rprint("\n[bold yellow]Re-running build/tests to verify repair...[/bold yellow]")
+                            ret_code2, test_output2 = _run_project_tests(session)
+                            color2 = "green" if ret_code2 == 0 else "red"
+                            title2 = "✓ Verification Passed" if ret_code2 == 0 else "✗ Verification Failed"
+                            console.print(Panel(test_output2, title=f"[bold {color2}]{title2}[/bold {color2}]", border_style=color2))
+                            if ret_code2 == 0:
+                                rprint("[bold green]✓ Auto-healing was successful! All build/tests passed.[/bold green]")
+                            else:
+                                rprint("[bold red]❌ Verification failed. You can adjust files manually or run another auto-fix.[/bold red]")
             else:
-                rprint("[bold red]Invalid option. Please choose 1-6.[/bold red]")
+                rprint("[bold red]Invalid option. Please choose 1-7.[/bold red]")
                 
         if session_ended:
             break
