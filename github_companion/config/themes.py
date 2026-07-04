@@ -118,25 +118,25 @@ THEMES = {
     ),
     "synthwave": CompanionTheme(
         name="synthwave",
-        banner="bold bright_magenta",
-        header="bold bright_cyan",
-        table_header="bold bright_magenta",
-        command="bold bright_cyan",
-        category="bold bright_yellow",
-        description="white",
-        success="bold green",
-        warning="bold bright_yellow",
-        error="bold bright_red",
-        prompt="bold bright_magenta",
-        border="bright_magenta",
-        highlight="bright_cyan",
+        banner="bold bright_magenta",        # #ff00ff  — logo
+        header="bold bright_cyan",           # #00ffff  — section titles / GC title
+        table_header="bold bright_magenta",  # magenta  — table headers
+        command="bold bright_cyan",          # cyan     — command names
+        category="bold bright_cyan",         # cyan     — category labels
+        description="white",                 # white    — body values
+        success="bold bright_green",         # #39ff14  — success messages
+        warning="bold bright_yellow",        # yellow   — warnings
+        error="bold bright_red",             # red      — errors
+        prompt="bold bright_magenta",        # magenta  — GC > prompt
+        border="bright_magenta",             # magenta  — dividers / borders
+        highlight="bright_cyan",             # cyan     — highlighted values
         category_colors={
-            "GitHub": "bold bright_cyan",
+            "GitHub":     "bold bright_cyan",
             "Repository": "bold bright_magenta",
-            "Utility": "bold bright_yellow",
-            "AI Agent": "bold bright_red",
-            "Workspace": "bold bright_green",
-            "System": "bold bright_magenta",
+            "Utility":    "bold bright_yellow",
+            "AI Agent":   "bold bright_red",
+            "Workspace":  "bold bright_green",
+            "System":     "bold bright_magenta",
         }
     ),
     "monokai": CompanionTheme(
