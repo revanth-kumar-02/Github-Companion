@@ -46,15 +46,11 @@ def show_gc_workspace():
         content.append(f"  [{theme.command}]4[/{theme.command}]. List Projects")
         content.append(f"  [{theme.command}]5[/{theme.command}]. Back to GC shell")
         
-        panel = Panel(
-            "\n".join(content),
-            title=f"[bold {theme.header}] Workspace Management [/bold {theme.header}]",
-            border_style=theme.border,
-            box=box.ROUNDED,
-            expand=False
-        )
         console.print()
-        console.print(panel)
+        console.print(f"[bold {theme.header}]Workspace Management[/bold {theme.header}]")
+        console.print("─" * 40, style=theme.border)
+        console.print()
+        console.print("\n".join(content))
         console.print()
 
         choice = console.input("[bold yellow]Select option (1-5) : [/bold yellow]").strip()

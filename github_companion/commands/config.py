@@ -61,15 +61,11 @@ def _display_config() -> None:
         else:
             table.add_row(k, str(v))
 
-    panel = Panel(
-        table,
-        border_style=theme.border,
-        box=box.ROUNDED,
-        title=f"[{theme.header}] GitHub Companion Configuration [/{theme.header}]",
-        expand=False
-    )
     console.print()
-    console.print(panel)
+    console.print(f"[bold {theme.header}]GitHub Companion Configuration[/bold {theme.header}]")
+    console.print("─" * 40, style=theme.border)
+    console.print()
+    console.print(table)
     rprint(f"[dim]Configuration file location: {CONFIG_PATH}[/dim]")
     rprint("[dim]Use 'config edit' to edit or 'config reset' to reset settings.[/dim]\n")
 

@@ -96,14 +96,9 @@ def show_gc_profile():
     content.append(f"[bold {theme.header}]📅 ACTIVITY[/]")
     content.append(format_row("📆", "Joined Date", created_at))
 
-    panel = Panel(
-        "\n".join(content),
-        title=f"[{theme.header}] GitHub Profile: {login} [/{theme.header}]",
-        border_style=theme.border,
-        box=box.ROUNDED,
-        expand=False
-    )
-
     print()
-    console.print(panel)
+    console.print(f"[bold {theme.header}]GitHub Profile: {login}[/bold {theme.header}]")
+    console.print("─" * 40, style=theme.border)
+    console.print()
+    console.print("\n".join(content))
     print()

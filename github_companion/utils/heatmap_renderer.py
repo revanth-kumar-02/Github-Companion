@@ -68,13 +68,9 @@ def render_heatmap(weeks):
     from rich.console import Group
     group = Group(*lines)
 
-    panel = Panel(
-        group,
-        border_style=theme.border,
-        box=box.ROUNDED,
-        title=f"[{theme.header}] GitHub Contribution Heatmap [/{theme.header}]",
-        expand=False
-    )
     console.print()
-    console.print(panel)
+    console.print(f"[bold {theme.header}]GitHub Contribution Heatmap[/bold {theme.header}]")
+    console.print("─" * 40, style=theme.border)
+    console.print()
+    console.print(group)
     console.print()

@@ -80,15 +80,11 @@ def theme_cmd(args: list[str] = None) -> None:
         is_active = " (active)" if t == current else ""
         content.append(f"  [{theme.highlight}]{idx}[/{theme.highlight}]. [bold]{t}[/bold]{is_active}")
         
-    panel = Panel(
-        "\n".join(content),
-        border_style=theme.border,
-        box=box.ROUNDED,
-        title=f"[{theme.header}] Visual Themes Configuration [/{theme.header}]",
-        expand=False
-    )
     console.print()
-    console.print(panel)
+    console.print(f"[bold {theme.header}]Visual Themes Configuration[/bold {theme.header}]")
+    console.print("─" * 40, style=theme.border)
+    console.print()
+    console.print("\n".join(content))
     console.print()
 
     try:

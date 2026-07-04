@@ -36,21 +36,15 @@ def show_gc_projects():
         from rich import box
         content = []
         if not dirs:
-            content.append("  [dim]No projects found in workspace.[/dim]")
-            content.append("")
-            content.append("[bold white]Options:[/bold white]")
-            content.append(f"  [{theme.command}]1[/{theme.command}]. Create New Project")
-            content.append(f"  [{theme.command}]2[/{theme.command}]. Back to GC shell")
-            
-            panel = Panel(
-                "\n".join(content),
-                title=f"[bold {theme.header}] Projects list [/bold {theme.header}]",
-                border_style=theme.border,
-                box=box.ROUNDED,
-                expand=False
-            )
             console.print()
-            console.print(panel)
+            console.print(f"[bold {theme.header}]Projects List[/bold {theme.header}]")
+            console.print("─" * 40, style=theme.border)
+            console.print()
+            console.print("  [dim]No projects found in workspace.[/dim]")
+            console.print()
+            console.print("[bold white]Options:[/bold white]")
+            console.print(f"  [{theme.command}]1[/{theme.command}]. Create New Project")
+            console.print(f"  [{theme.command}]2[/{theme.command}]. Back to GC shell")
             console.print()
             
             choice = console.input("[bold yellow]Select option (1-2) : [/bold yellow]").strip()
@@ -61,23 +55,22 @@ def show_gc_projects():
             else:
                 break
 
-        for idx, d in enumerate(dirs, 1):
-            content.append(f"  [{theme.highlight}]{idx}[/{theme.highlight}]. {d}")
-
-        content.append("")
-        content.append(f"  [{theme.command}]B[/{theme.command}]. Back to GC shell")
+        table = Table(show_header=True, header_style=theme.table_header, border_style=theme.border)
+        table.add_column("No.", style=theme.command, justify="right", width=4)
+        table.add_column("Project Name", style="bold white")
+        table.add_column("Local Path", style="dim")
         
-        panel = Panel(
-            "\n".join(content),
-            title=f"[bold {theme.header}] Projects in Workspace [/bold {theme.header}]",
-            border_style=theme.border,
-            box=box.ROUNDED,
-            expand=False
-        )
+        for idx, d in enumerate(dirs, 1):
+            local_path = os.path.join(workspace_path, d)
+            table.add_row(str(idx), d, local_path)
+            
         console.print()
-        console.print(panel)
+        console.print(f"[bold {theme.header}]Projects in Workspace[/bold {theme.header}]")
+        console.print("─" * 40, style=theme.border)
         console.print()
-
+        console.print(table)
+        console.print()
+        
         choice = console.input("[bold yellow]Select a project index or action (B) : [/bold yellow]").strip()
         if choice.upper() == "B":
             break
@@ -188,7 +181,12 @@ def _project_actions_menu(workspace_path: str, project_name: str) -> None:
             if os.path.exists(readme_path):
                 try:
                     with open(readme_path, "r", encoding="utf-8") as f:
-                        rprint(Panel(f.read(), title="README.md", border_style="cyan"))
+                        console.print()
+                        console.print(f"[bold cyan]README.md: {project_name}[/bold cyan]")
+                        console.print("─" * 40, style="cyan")
+                        console.print(f.read())
+                        console.print("─" * 40, style="cyan")
+                        console.print()
                 except Exception as e:
                     error(f"Could not read README.md: {e}")
             else:
@@ -247,7 +245,12 @@ def _project_actions_menu(workspace_path: str, project_name: str) -> None:
             log_out = git_log_oneline(project_path)
             info_table.add_row("Last Commit", log_out.strip() or "No Commits")
             
-            console.print(Panel(info_table, title="Project Details", border_style="cyan", expand=False))
+            console.print()
+            console.print(f"[bold cyan]Project Details: {project_name}[/bold cyan]")
+            console.print("─" * 40, style="cyan")
+            console.print()
+            console.print(info_table)
+            console.print()
 
         elif action == "9":
             break

@@ -14,12 +14,12 @@ console = Console()
 def header():
     theme = get_active_theme_obj()
     banner = r"""
-  ██████╗  ██████╗
- ██╔════╝ ██╔════╝
- ██║  ███╗██║
- ██║   ██║██║
- ╚██████╔╝╚██████╗
-  ╚═════╝  ╚═════╝
+  ██████╗   ██████╗
+ ██╔════╝  ██╔════╝
+ ██║  ███╗ ██║
+ ██║   ██║ ██║
+ ╚██████╔╝ ╚██████╗
+  ╚═════╝   ╚═════╝
 """
     console.print(banner, style=theme.banner)
     console.print("GitHub Companion", style=f"bold {theme.header}")

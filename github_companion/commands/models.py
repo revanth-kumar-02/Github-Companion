@@ -60,7 +60,8 @@ def show_models_menu() -> None:
                 
             built_in_table.add_row(display_name_str, provider_str, role_str)
 
-        console.print(Panel(built_in_table, title="[bold purple] Built-in Models [/bold purple]", border_style=border_style, expand=False))
+        console.print(f"[bold {theme.header}]Built-in Models[/bold {theme.header}]")
+        console.print(built_in_table)
         rprint()
 
         # ── 2. List Custom Models ──────────────────────────────────────────────
@@ -79,7 +80,8 @@ def show_models_menu() -> None:
                     c.get("model_name", ""),
                     c.get("api_endpoint", ""),
                 )
-            console.print(Panel(custom_table, title="[bold purple] Custom Registered Models [/bold purple]", border_style=border_style, expand=False))
+            console.print(f"[bold {theme.header}]Custom Registered Models[/bold {theme.header}]")
+            console.print(custom_table)
         else:
             rprint("[dim]  No custom models registered yet.[/dim]")
 
@@ -92,12 +94,9 @@ def show_models_menu() -> None:
         else:
             options.append(f"  [{theme.highlight}]2[/{theme.highlight}]. Back to GC shell")
             
-        console.print(Panel(
-            "\n".join(options),
-            title="[bold white]Options[/bold white]",
-            border_style=border_style,
-            expand=False
-        ))
+        rprint("[bold white]Options:[/bold white]")
+        for opt in options:
+            rprint(opt)
         rprint()
 
         try:
