@@ -17,6 +17,7 @@ from github_companion.ai.providers.ollama_provider import OllamaProvider
 from github_companion.ai.providers.openrouter_provider import OpenRouterProvider
 from github_companion.ai.providers.nvidia_provider import NvidiaProvider
 from github_companion.ai.engineering_analysis import EngineeringAnalysisEngine
+from github_companion.ai.design_director import DesignDirector
 from github_companion.services.theme_service import get_active_theme_obj
 from github_companion.services.config_service import (
     get_custom_models,
@@ -153,13 +154,26 @@ def start_code_mode() -> None:
     if expanded_spec:
         EngineeringAnalysisEngine.display(expanded_spec)
         rprint()
+        proceed = console.input("[bold yellow]Proceed to detailed Design Analysis? (y/n) [y]: [/bold yellow]").strip().lower()
+        if proceed not in ("", "y", "yes"):
+            rprint("[dim]  Cancelled by user.[/dim]")
+            return
+
+    # ── AI Design Director Stage ──────────────────────────────────────────────
+    design_spec = None
+    with console.status("[bold yellow]Running AI Design Director...[/bold yellow]", spinner="dots"):
+        design_spec = DesignDirector.analyze(provider, project_idea, expanded_spec)
+        
+    if design_spec:
+        DesignDirector.display(design_spec)
+        rprint()
         proceed = console.input("[bold yellow]Proceed to detailed Implementation Planning? (y/n) [y]: [/bold yellow]").strip().lower()
         if proceed not in ("", "y", "yes"):
             rprint("[dim]  Cancelled by user.[/dim]")
             return
 
     # ── Planning Stage ────────────────────────────────────────────────────────
-    plan = _generate_plan(provider, project_idea, expanded_spec)
+    plan = _generate_plan(provider, project_idea, expanded_spec, design_spec)
     if not plan:
         error("Failed to generate implementation plan.")
         return
@@ -187,7 +201,7 @@ def start_code_mode() -> None:
             return
         elif action == "R":
             with console.status("[bold yellow]  Regenerating new plan...[/bold yellow]", spinner="dots"):
-                plan = _generate_plan(provider, project_idea, expanded_spec)
+                plan = _generate_plan(provider, project_idea, expanded_spec, design_spec)
             if not plan:
                 error("Failed to generate implementation plan.")
                 return
@@ -195,8 +209,9 @@ def start_code_mode() -> None:
             feedback = console.input("\n[bold cyan]What would you like to edit? : [/bold cyan]").strip()
             if feedback:
                 with console.status("[bold yellow]  Re-planning project...[/bold yellow]", spinner="dots"):
-                    # Pass the expanded specification to help shape the edited plan
-                    plan = _regenerate_plan(provider, project_idea, plan, f"{feedback}\nExpanded Spec: {json.dumps(expanded_spec)}")
+                    # Pass the expanded specification and design specification to help shape the edited plan
+                    ctx_info = f"{feedback}\nExpanded Spec: {json.dumps(expanded_spec)}\nDesign Spec: {json.dumps(design_spec)}"
+                    plan = _regenerate_plan(provider, project_idea, plan, ctx_info)
                 if not plan:
                     error("Failed to update implementation plan.")
                     return
@@ -674,12 +689,14 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> dict | None:
 
 # ── Plan generation helpers ──────────────────────────────────────────────────
 
-def _generate_plan(provider: BaseProvider, project_idea: str, expanded_spec: dict | None = None) -> dict | None:
+def _generate_plan(provider: BaseProvider, project_idea: str, expanded_spec: dict | None = None, design_spec: dict | None = None) -> dict | None:
     """Request the AI to generate a structured implementation plan in JSON."""
     system_prompt = """\
 You are a Senior Software Architect. Analyze the user's project request and generate a highly detailed, professional, structured JSON implementation plan.
 You MUST return ONLY a JSON code block inside markdown code tags (e.g. ```json ... ```).
 Do not output any introductory or conversational text, just the JSON block.
+
+You MUST design the file structure and coding strategy to strictly adhere to all UI/UX styling choices, layout grids, components, palettes, and animations specified in the Design Analysis spec. Ensure every file is planned to look beautiful and professional.
 
 The JSON object must contain the following keys:
 {
@@ -768,7 +785,9 @@ The JSON object must contain the following keys:
 """
     spec_context = ""
     if expanded_spec:
-        spec_context = f"\nRequirement Expansion & Inferred Specifications to incorporate:\n{json.dumps(expanded_spec, indent=2)}\n"
+        spec_context += f"\nEngineering Analysis Spec:\n{json.dumps(expanded_spec, indent=2)}\n"
+    if design_spec:
+        spec_context += f"\nDesign Director Spec:\n{json.dumps(design_spec, indent=2)}\n"
         
     prompt = f"Analyze and plan: {project_idea}\n{spec_context}"
 
@@ -781,7 +800,11 @@ The JSON object must contain the following keys:
                 ]
             )
             content = msg.content or ""
-            return _parse_json_block(content)
+            plan = _parse_json_block(content)
+            if plan:
+                plan["engineering_spec"] = expanded_spec
+                plan["design_spec"] = design_spec
+            return plan
         except Exception as exc:
             error(f"Error during planning: {exc}")
             return None
@@ -1016,13 +1039,25 @@ def _display_plan(plan: dict) -> None:
 
 def _generate_file_content(provider: BaseProvider, plan: dict, f_path: str) -> str:
     """Generate complete, high-quality code content for a given path."""
+    eng_spec = plan.get("engineering_spec")
+    ds_spec = plan.get("design_spec")
+    
+    extra_context = ""
+    if eng_spec:
+        extra_context += f"\nEngineering Analysis Guidelines:\n{json.dumps(eng_spec, indent=2)}\n"
+    if ds_spec:
+        extra_context += f"\nAI Design Director Guidelines:\n{json.dumps(ds_spec, indent=2)}\n"
+
     system_prompt = f"""\
-You are an expert Software Engineer.
+You are an expert Software Engineer and UI/UX developer.
 You are writing the file '{f_path}' for the project '{plan.get('project_name')}'.
 Project Plan details:
 - Description: {plan.get('strategy')}
 - Architecture: {plan.get('architecture')}
 - Dependencies: {plan.get('dependencies')}
+{extra_context}
+
+You MUST strictly implement all UI/UX layouts, styling choices, CSS frameworks, color themes, responsive breakpoints, typography, icon library options, component logic, sound settings, and accessibilty specifications specified in the guidelines above. Avoid any generic placeholders.
 
 Write the COMPLETE, production-ready, high-quality, fully functional source code for the file: '{f_path}'.
 - You MUST write the complete implementation logic. DO NOT use 'pass', placeholder comments, 'TODO', or ellipses (...).
