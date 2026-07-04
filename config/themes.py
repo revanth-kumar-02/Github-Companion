@@ -1,5 +1,16 @@
 """Central visual theme registry for GitHub Companion."""
 
+class FixedComponentTheme:
+    """Styles that remain constant regardless of the user's selected CLI theme to preserve platform branding."""
+    GITHUB_HEATMAP = {
+        "NONE": "on grey15",
+        "FIRST_QUARTILE": "on green4",
+        "SECOND_QUARTILE": "on green3",
+        "THIRD_QUARTILE": "on green",
+        "FOURTH_QUARTILE": "on bright_green",
+    }
+
+
 class CompanionTheme:
     """Represents a visual color palette theme for the GitHub Companion CLI."""
     def __init__(

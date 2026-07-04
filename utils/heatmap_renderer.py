@@ -1,23 +1,20 @@
 """Render GitHub contribution heatmap."""
 
 from rich.console import Console
+from services.theme_service import get_active_theme_obj
+from config.themes import FixedComponentTheme
 
 console = Console()
 
-LEVEL_STYLE = {
-    "NONE": "on grey15",
-    "FIRST_QUARTILE": "on green4",
-    "SECOND_QUARTILE": "on green3",
-    "THIRD_QUARTILE": "on green",
-    "FOURTH_QUARTILE": "on bright_green",
-}
+LEVEL_STYLE = FixedComponentTheme.GITHUB_HEATMAP
 
 
 def render_heatmap(weeks):
     """Render GitHub contribution calendar."""
+    theme = get_active_theme_obj()
 
     console.print()
-    console.print("[bold cyan]GitHub Contribution Heatmap[/bold cyan]")
+    console.print(f"[{theme.header}]GitHub Contribution Heatmap[/{theme.header}]")
     console.print()
 
     # Create 7 rows (Sun -> Sat)
