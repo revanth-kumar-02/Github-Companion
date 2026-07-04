@@ -33,13 +33,14 @@ def show_models_menu() -> None:
         theme = get_active_theme_obj()
         header_style = theme.table_header
         border_style = theme.border
+        from rich import box
 
         rprint()
         rprint(f"[{theme.header}]Manage AI Models[/{theme.header}]")
         rprint(f"[{theme.border}]" + "─" * 47 + f"[/{theme.border}]")
 
         # ── 1. List Built-in Models ────────────────────────────────────────────
-        built_in_table = Table(title="Built-in Models", show_header=True, header_style=header_style, border_style=border_style)
+        built_in_table = Table(show_header=True, header_style=header_style, border_style=border_style)
         built_in_table.add_column("Model Name", style=theme.command)
         built_in_table.add_column("Default Provider", style=theme.highlight)
         built_in_table.add_column("Primary Role", style=theme.description)
@@ -59,13 +60,13 @@ def show_models_menu() -> None:
                 
             built_in_table.add_row(display_name_str, provider_str, role_str)
 
-        console.print(built_in_table)
+        console.print(Panel(built_in_table, title="[bold purple] Built-in Models [/bold purple]", border_style=border_style, expand=False))
         rprint()
 
         # ── 2. List Custom Models ──────────────────────────────────────────────
         customs = get_custom_models()
         if customs:
-            custom_table = Table(title="Custom Registered Models", show_header=True, header_style=header_style, border_style=border_style)
+            custom_table = Table(show_header=True, header_style=header_style, border_style=border_style)
             custom_table.add_column("ID", style=theme.highlight)
             custom_table.add_column("Provider Name", style=theme.command)
             custom_table.add_column("Model Name", style=theme.description)
@@ -78,18 +79,25 @@ def show_models_menu() -> None:
                     c.get("model_name", ""),
                     c.get("api_endpoint", ""),
                 )
-            console.print(custom_table)
+            console.print(Panel(custom_table, title="[bold purple] Custom Registered Models [/bold purple]", border_style=border_style, expand=False))
         else:
             rprint("[dim]  No custom models registered yet.[/dim]")
 
         rprint()
-        rprint("[bold white]Options:[/bold white]")
-        rprint(f"  [{theme.highlight}]1[/{theme.highlight}]. Add Custom Model")
+        options = []
+        options.append(f"  [{theme.highlight}]1[/{theme.highlight}]. Add Custom Model")
         if customs:
-            rprint(f"  [{theme.highlight}]2[/{theme.highlight}]. Delete a Custom Model")
-            rprint(f"  [{theme.highlight}]3[/{theme.highlight}]. Back to GC shell")
+            options.append(f"  [{theme.highlight}]2[/{theme.highlight}]. Delete a Custom Model")
+            options.append(f"  [{theme.highlight}]3[/{theme.highlight}]. Back to GC shell")
         else:
-            rprint(f"  [{theme.highlight}]2[/{theme.highlight}]. Back to GC shell")
+            options.append(f"  [{theme.highlight}]2[/{theme.highlight}]. Back to GC shell")
+            
+        console.print(Panel(
+            "\n".join(options),
+            title="[bold white]Options[/bold white]",
+            border_style=border_style,
+            expand=False
+        ))
         rprint()
 
         try:

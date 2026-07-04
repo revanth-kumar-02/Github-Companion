@@ -496,7 +496,7 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> dict | None:
 
     # ── Self-Review & Project Validation ──────────────────────────────────────
     try:
-        _review_and_fix_project(provider, project_path, plan)
+        _review_and_fix_project(provider, project_path, plan, dep_file)
     except Exception as e:
         rprint(f"  [bold red]❌ Review & Fix phase failed: {e}[/bold red]")
 
@@ -1303,8 +1303,8 @@ def _display_completion_report(plan: dict, project_path: str, generated_count: i
     rprint()
 
 
-def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dict) -> None:
-    """Launch Reviewer Agent loop: check placeholder markers, verify syntax/compilation, and auto-fix."""
+def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dict, dep_file: str | None = None) -> None:
+    """Launch Reviewer Agent loop: check placeholder markers, verify syntax/compilation, check empty files, check boilerplate, and auto-fix."""
     import re
     from github_companion.services.system_service import compile_python_file
     rprint("\n[bold purple]🔎 Starting Self-Review & Project Validation...[/bold purple]")
@@ -1313,13 +1313,20 @@ def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dic
     for category in ("files", "templates", "static_resources", "assets"):
         files.extend(plan.get(category, []))
         
+    # Include boilerplate files for audit
+    files.extend(["README.md", ".gitignore", "LICENSE"])
+    if dep_file:
+        files.append(dep_file)
+        
+    unique_files = []
     for fpath in files:
-        # Skip bootstrapping files
-        if fpath.lower() in ("readme.md", ".gitignore", "license", "requirements.txt", "package.json", "cargo.toml", "go.mod"):
-            continue
-
+        if fpath and fpath not in unique_files:
+            unique_files.append(fpath)
+            
+    for fpath in unique_files:
         full_path = os.path.join(project_path, fpath)
-        if not os.path.exists(full_path) or os.path.isdir(full_path):
+        
+        if fpath.endswith("/") or fpath.endswith("\\"):
             continue
             
         attempts = 0
@@ -1327,13 +1334,32 @@ def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dic
         
         while attempts < max_attempts:
             attempts += 1
+            
+            if not os.path.exists(full_path):
+                rprint(f"  [bold yellow]⚠ Missing expected file: {fpath} (Attempt {attempts}/{max_attempts})...[/bold yellow]")
+                fixed_content = _generate_file_fix(provider, plan, fpath, "", "File is missing from workspace.")
+                if fixed_content:
+                    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                    with open(full_path, "w", encoding="utf-8") as f:
+                        f.write(fixed_content)
+                else:
+                    break
+                continue
+                
+            if os.path.isdir(full_path):
+                break
+                
             with open(full_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 
             issues = []
             content_lower = content.lower()
             
-            # 1. Check for placeholders
+            # Check for empty files
+            if not content.strip():
+                issues.append("File is empty or contains only whitespace.")
+            
+            # Check for placeholders
             if fpath.endswith(".py"):
                 if re.search(r'\bpass\b', content) and not ("bypass" in content_lower or "compass" in content_lower):
                     issues.append("Contains 'pass' placeholder statement.")
@@ -1345,17 +1371,35 @@ def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dic
                 if p in content_lower:
                     issues.append(f"Contains placeholder/todo text: '{p}'")
             
-            # 2. Syntax validation for Python files
-            if fpath.endswith(".py"):
+            # Syntax validation for Python files
+            if fpath.endswith(".py") and content.strip():
                 res = compile_python_file(full_path)
                 if res.returncode != 0:
                     issues.append(f"Syntax error / Compilation failed:\n{res.stderr.strip()}")
+            
+            # JSON parsing validation
+            if fpath.endswith(".json") and content.strip():
+                try:
+                    json.loads(content)
+                except Exception as je:
+                    issues.append(f"Invalid JSON format: {je}")
+                    
+            # Boilerplate validations
+            if fpath.lower() == "readme.md" and content.strip():
+                if not content.strip().startswith("#"):
+                    issues.append("README.md does not start with a markdown header title (#).")
+                if len(content.split()) < 10:
+                    issues.append("README.md is extremely short and lacks context.")
+                    
+            if fpath.lower() == ".gitignore" and content.strip():
+                if len(content.splitlines()) < 2:
+                    issues.append(".gitignore lacks standard entries (must have multiple pattern lines).")
                     
             if not issues:
-                rprint(f"  [bold green]✓[/bold green] {fpath} passed review")
+                rprint(f"  [bold green]✓[/bold green] {fpath} passed validation")
                 break
                 
-            rprint(f"  [bold yellow]⚠ Review warning in {fpath}:[/bold yellow]")
+            rprint(f"  [bold yellow]⚠ Validation warning in {fpath}:[/bold yellow]")
             for iss in issues:
                 rprint(f"    - {iss}")
                 
@@ -1641,6 +1685,15 @@ def _handle_coding_prompt(provider: BaseProvider, session: dict, user_request: s
         content = msg["content"]
         history_str += f"{role.upper()}: {content}\n"
         
+    try:
+        from github_companion.services.git_service import git_log_oneline
+        recent_commits = git_log_oneline(session["workspace_path"]).strip() or "No commits yet"
+    except Exception:
+        recent_commits = "No commits yet"
+        
+    modified_files = session.get("modified_files", [])
+    modified_str = ", ".join(modified_files) if modified_files else "None"
+    
     system_prompt = f"""\
 You are an expert AI Coding Agent. The user wants to modify an existing project.
 Project Context:
@@ -1648,7 +1701,10 @@ Project Context:
 - Framework: {session['framework']}
 - Language: {session['language']}
 - Workspace Path: {session['workspace_path']}
-- Branch: {session['branch']}
+- Repository URL: {session.get('repo_url') or 'N/A'}
+- Branch: {session.get('branch', 'main')}
+- Files Modified in Current Session: {modified_str}
+- Recent Commits: {recent_commits}
 
 Current Files in Project:
 {files_str}
@@ -1669,7 +1725,8 @@ The JSON object must contain the following keys:
   "commit_suggestion": "Short, conventional commit message suggestion"
 }}
 """
-    with console.status("[bold yellow]Planning changes...[/bold yellow]", spinner="dots"):
+    theme = get_active_theme_obj()
+    with console.status(f"[bold {theme.highlight}]🤖 Planning changes...[/bold {theme.highlight}]", spinner="dots"):
         try:
             msg = provider.generate([
                 {"role": "system", "content": system_prompt},
@@ -1709,7 +1766,7 @@ The JSON object must contain the following keys:
         full_path = os.path.join(session["workspace_path"], f_path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         
-        with console.status(f"[bold yellow]Generating {f_path}...[/bold yellow]", spinner="dots"):
+        with console.status(f"[bold {theme.highlight}]✍️ Generating {f_path}...[/bold {theme.highlight}]", spinner="dots"):
             content = _generate_session_file_create(provider, session, f_path, plan)
         if content is not None:
             with open(full_path, "w", encoding="utf-8") as f:
@@ -1729,7 +1786,7 @@ The JSON object must contain the following keys:
             with open(full_path, "r", encoding="utf-8") as f:
                 current_content = f.read()
                 
-        with console.status(f"[bold yellow]Modifying {f_path}...[/bold yellow]", spinner="dots"):
+        with console.status(f"[bold {theme.highlight}]🛠️ Modifying {f_path}...[/bold {theme.highlight}]", spinner="dots"):
             content = _generate_session_file_modify(provider, session, f_path, current_content, user_request, plan)
         if content is not None:
             with open(full_path, "w", encoding="utf-8") as f:

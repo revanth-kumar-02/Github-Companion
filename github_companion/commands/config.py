@@ -36,22 +36,23 @@ def config_cmd(args: list[str] = None) -> None:
 
 def _display_config() -> None:
     """Display the current configuration in a beautiful table."""
+    from github_companion.services.theme_service import get_active_theme_obj
+    from rich import box
+    from rich.panel import Panel
+    
+    theme = get_active_theme_obj()
     settings = _load()
     if not settings:
         error("No configuration found. Run 'gc' or restart to configure.")
         return
 
-    rprint()
-    rprint("[bold bright_white]Current Configuration[/bold bright_white]")
-    rprint("[blue]" + "─" * 47 + "[/blue]")
-
-    table = Table(show_header=True, header_style="bold yellow", border_style="blue")
-    table.add_column("Setting", style="bold cyan")
-    table.add_column("Value", style="white")
+    table = Table(show_header=True, header_style=theme.table_header, border_style=theme.border)
+    table.add_column("Setting", style=theme.command)
+    table.add_column("Value", style=theme.description)
 
     # Display settings, masking sensitive tokens
     for k, v in settings.items():
-        if k in ("github_token", "openrouter_api_key", "api_key") and v:
+        if k in ("github_token", "openrouter_api_key", "api_key", "nvidia_api_key") and v:
             # Mask the token
             masked = v[:6] + "*" * (len(v) - 6) if len(v) > 6 else "*" * 8
             table.add_row(k, masked)
@@ -60,8 +61,16 @@ def _display_config() -> None:
         else:
             table.add_row(k, str(v))
 
-    console.print(table)
-    rprint(f"\n[dim]Configuration file location: {CONFIG_PATH}[/dim]")
+    panel = Panel(
+        table,
+        border_style=theme.border,
+        box=box.ROUNDED,
+        title=f"[{theme.header}] GitHub Companion Configuration [/{theme.header}]",
+        expand=False
+    )
+    console.print()
+    console.print(panel)
+    rprint(f"[dim]Configuration file location: {CONFIG_PATH}[/dim]")
     rprint("[dim]Use 'config edit' to edit or 'config reset' to reset settings.[/dim]\n")
 
 

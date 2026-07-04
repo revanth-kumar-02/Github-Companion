@@ -102,10 +102,14 @@ def main():
 
 
     if command in commands:
-        if command in ("config", "doctor", "theme", "tutor"):
-            commands[command](sys.argv[2:])
-        else:
-            commands[command]()
+        try:
+            if command in ("config", "doctor", "theme", "tutor"):
+                commands[command](sys.argv[2:])
+            else:
+                commands[command]()
+        except Exception as e:
+            from github_companion.utils.ui import show_exception_panel
+            show_exception_panel(e, f"CLI Command execution failed: '{command}'")
     else:
         show_help()
 

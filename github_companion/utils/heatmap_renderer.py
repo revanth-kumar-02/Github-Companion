@@ -1,6 +1,9 @@
 """Render GitHub contribution heatmap."""
 
 from rich.console import Console
+from rich.text import Text
+from rich.panel import Panel
+from rich import box
 from github_companion.services.theme_service import get_active_theme_obj
 from github_companion.config.themes import FixedComponentTheme
 
@@ -13,21 +16,14 @@ def render_heatmap(weeks):
     """Render GitHub contribution calendar."""
     theme = get_active_theme_obj()
 
-    console.print()
-    console.print(f"[{theme.header}]GitHub Contribution Heatmap[/{theme.header}]")
-    console.print()
-
     # Create 7 rows (Sun -> Sat)
     grid = [[] for _ in range(7)]
 
     # Fill the grid week by week
     for week in weeks:
-
         days = week["contributionDays"]
-
         # Every week should have 7 positions
         for row in range(7):
-
             if row < len(days):
                 grid[row].append(days[row]["contributionLevel"])
             else:
@@ -43,27 +39,20 @@ def render_heatmap(weeks):
         "Sat",
     ]
 
+    lines = []
     # Print the heatmap
     for row in range(7):
-
-        console.print(f"[bold]{day_names[row]:<4}[/bold] ", end="")
-
+        row_text = Text()
+        row_text.append(f"{day_names[row]:<4} ", style="bold")
         for level in grid[row]:
-
             style = LEVEL_STYLE.get(level, "on grey15")
-
-            console.print("  ", style=style, end="")
-
-        console.print()
-
-    console.print()
+            row_text.append("  ", style=style)
+            row_text.append(" ")  # spacer
+        lines.append(row_text)
 
     # Legend
-    console.print(
-        "\nLess ",
-        end=""
-    )
-
+    legend_text = Text()
+    legend_text.append("\nLess ")
     for level in [
         "NONE",
         "FIRST_QUARTILE",
@@ -71,7 +60,21 @@ def render_heatmap(weeks):
         "THIRD_QUARTILE",
         "FOURTH_QUARTILE",
     ]:
+        legend_text.append("  ", style=LEVEL_STYLE[level])
+        legend_text.append(" ")
+    legend_text.append(" More")
+    lines.append(legend_text)
 
-        console.print("  ", style=LEVEL_STYLE[level], end=" ")
+    from rich.console import Group
+    group = Group(*lines)
 
-    console.print(" More")
+    panel = Panel(
+        group,
+        border_style=theme.border,
+        box=box.ROUNDED,
+        title=f"[{theme.header}] GitHub Contribution Heatmap [/{theme.header}]",
+        expand=False
+    )
+    console.print()
+    console.print(panel)
+    console.print()

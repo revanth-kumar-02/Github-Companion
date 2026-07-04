@@ -31,18 +31,28 @@ def show_gc_projects():
             error(f"Failed to list workspace projects: {e}")
             break
 
-        rprint()
-        rprint("[bold bright_white]==========================================[/bold bright_white]")
-        rprint("[bold bright_white]                 PROJECTS                 [/bold bright_white]")
-        rprint("[bold bright_white]==========================================[/bold bright_white]")
-        rprint()
-
+        from github_companion.services.theme_service import get_active_theme_obj
+        theme = get_active_theme_obj()
+        from rich import box
+        content = []
         if not dirs:
-            rprint("  [dim]No projects found in workspace.[/dim]")
-            rprint()
-            rprint("  [bold cyan]1[/bold cyan]. Create New Project")
-            rprint("  [bold cyan]2[/bold cyan]. Back to GC shell")
-            rprint()
+            content.append("  [dim]No projects found in workspace.[/dim]")
+            content.append("")
+            content.append("[bold white]Options:[/bold white]")
+            content.append(f"  [{theme.command}]1[/{theme.command}]. Create New Project")
+            content.append(f"  [{theme.command}]2[/{theme.command}]. Back to GC shell")
+            
+            panel = Panel(
+                "\n".join(content),
+                title=f"[bold {theme.header}] Projects list [/bold {theme.header}]",
+                border_style=theme.border,
+                box=box.ROUNDED,
+                expand=False
+            )
+            console.print()
+            console.print(panel)
+            console.print()
+            
             choice = console.input("[bold yellow]Select option (1-2) : [/bold yellow]").strip()
             if choice == "1":
                 from github_companion.commands.code import start_code_mode
@@ -52,11 +62,21 @@ def show_gc_projects():
                 break
 
         for idx, d in enumerate(dirs, 1):
-            rprint(f"  [bold cyan]{idx}[/bold cyan]. {d}")
+            content.append(f"  [{theme.highlight}]{idx}[/{theme.highlight}]. {d}")
 
-        rprint()
-        rprint("  [bold cyan]B[/bold cyan]. Back to GC shell")
-        rprint()
+        content.append("")
+        content.append(f"  [{theme.command}]B[/{theme.command}]. Back to GC shell")
+        
+        panel = Panel(
+            "\n".join(content),
+            title=f"[bold {theme.header}] Projects in Workspace [/bold {theme.header}]",
+            border_style=theme.border,
+            box=box.ROUNDED,
+            expand=False
+        )
+        console.print()
+        console.print(panel)
+        console.print()
 
         choice = console.input("[bold yellow]Select a project index or action (B) : [/bold yellow]").strip()
         if choice.upper() == "B":

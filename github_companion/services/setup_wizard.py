@@ -121,6 +121,8 @@ def print_step_header(step: int, total_steps: int, title: str) -> None:
 
 def run_setup_wizard() -> bool:
     """Run the interactive setup wizard."""
+    from github_companion.services.theme_service import get_available_themes, set_active_theme
+    
     # ── Welcome Screen ─────────────────────────────────────────────────────────
     console.clear()
     rprint()
@@ -147,7 +149,7 @@ def run_setup_wizard() -> bool:
     github_token = ""
     
     while True:
-        print_step_header(1, 4, "GitHub Configuration")
+        print_step_header(1, 5, "GitHub Configuration")
         
         rprint("[bold white]GitHub Username[/bold white]")
         github_username = console.input("[bold purple]> [/bold purple]").strip()
@@ -173,14 +175,71 @@ def run_setup_wizard() -> bool:
             if retry != "y":
                 return False
 
-    # ── STEP 2: AI Provider Selection ──────────────────────────────────────────
+    # ── STEP 2: Choose your Workspace Location ─────────────────────────────────
+    print_step_header(2, 5, "Choose your Workspace Location")
+    home = os.path.expanduser("~")
+    default_workspace = os.path.join(home, "GC-Projects")
+
+    rprint(f"Default Location: [cyan]{default_workspace}[/cyan]\n")
+    rprint("Press Enter to use default, or enter a custom parent directory path.")
+    parent_input = console.input("[bold purple]Location: [/bold purple]").strip()
+
+    if not parent_input:
+        workspace_path = default_workspace
+    else:
+        parent_input = os.path.abspath(os.path.expanduser(parent_input))
+        if parent_input.endswith("GC-Projects") or parent_input.endswith("GC-Projects/"):
+            workspace_path = parent_input
+        else:
+            workspace_path = os.path.join(parent_input, "GC-Projects")
+
+    try:
+        os.makedirs(workspace_path, exist_ok=True)
+        rprint(f"\n[bold green]✓ Workspace configured at: {workspace_path}[/bold green]")
+    except Exception as e:
+        rprint(f"\n[bold red]❌ Failed to create directory: {e}. Using default instead.[/bold red]")
+        workspace_path = default_workspace
+        os.makedirs(workspace_path, exist_ok=True)
+
+    console.input("\nPress Enter to continue...")
+
+    # ── STEP 3: Visual Theme Selection ─────────────────────────────────────────
+    print_step_header(3, 5, "Visual Theme Selection")
+    themes = get_available_themes()
+    rprint("Choose a visual theme palette for GC:\n")
+    for idx, t in enumerate(themes, start=1):
+        rprint(f"  [bold cyan][{idx}][/bold cyan] {t.capitalize()}")
+    rprint()
+    
+    selected_theme = "default"
+    while True:
+        theme_choice = console.input("[bold purple]> [/bold purple]").strip()
+        try:
+            val = int(theme_choice)
+            if 1 <= val <= len(themes):
+                selected_theme = themes[val - 1]
+                set_active_theme(selected_theme)
+                rprint(f"\n[bold green]✓ Theme set to {selected_theme.capitalize()}[/bold green]")
+                break
+            else:
+                rprint(f"[bold red]❌ Invalid choice. Select 1 to {len(themes)}.[/bold red]")
+        except ValueError:
+            if theme_choice in themes:
+                selected_theme = theme_choice
+                set_active_theme(selected_theme)
+                rprint(f"\n[bold green]✓ Theme set to {selected_theme.capitalize()}[/bold green]")
+                break
+            rprint(f"[bold red]❌ Invalid choice. Select 1 to {len(themes)}.[/bold red]")
+    console.input("\nPress Enter to continue...")
+
+    # ── STEP 4: AI Provider Selection ──────────────────────────────────────────
     provider = "ollama"
     openrouter_key = ""
     nvidia_key = ""
     ollama_host = "http://localhost:11434"
     
     while True:
-        print_step_header(2, 4, "AI Provider Selection")
+        print_step_header(4, 5, "AI Provider Selection")
         
         rprint("Choose an AI Provider:\n")
         rprint("  [bold cyan][1][/bold cyan] Ollama (Recommended)")
@@ -263,12 +322,12 @@ def run_setup_wizard() -> bool:
             rprint("[bold red]❌ Invalid choice. Select 1, 2, 3, or 4.[/bold red]")
             console.input("\nPress Enter to try again...")
 
-    # ── STEP 3: Default AI Model Selection ─────────────────────────────────────
+    # ── STEP 5: Default AI Model Selection ─────────────────────────────────────
     coding_model = "qwen2.5-coder"
     reasoning_model = "deepseek-r1"
     assistant_model = "llama3.3"
     
-    print_step_header(3, 4, "Default AI Model Selection")
+    print_step_header(5, 5, "Default AI Model Selection")
     
     from github_companion.ai.model_registry import get_models_by_provider
     
@@ -301,33 +360,6 @@ def run_setup_wizard() -> bool:
         except ValueError:
             rprint(f"[bold red]❌ Invalid choice. Select 1 to {len(prov_models)}.[/bold red]")
                 
-    # ── STEP 4: Choose your Workspace Location ─────────────────────────────────
-    print_step_header(4, 4, "Choose your Workspace Location")
-    import platform
-    home = os.path.expanduser("~")
-    default_workspace = os.path.join(home, "GC-Projects")
-
-    rprint(f"Default Location: [cyan]{default_workspace}[/cyan]\n")
-    rprint("Press Enter to use default, or enter a custom parent directory path.")
-    parent_input = console.input("[bold purple]Location: [/bold purple]").strip()
-
-    if not parent_input:
-        workspace_path = default_workspace
-    else:
-        parent_input = os.path.abspath(os.path.expanduser(parent_input))
-        if parent_input.endswith("GC-Projects") or parent_input.endswith("GC-Projects/"):
-            workspace_path = parent_input
-        else:
-            workspace_path = os.path.join(parent_input, "GC-Projects")
-
-    try:
-        os.makedirs(workspace_path, exist_ok=True)
-        rprint(f"\n[bold green]✓ Workspace configured at: {workspace_path}[/bold green]")
-    except Exception as e:
-        rprint(f"\n[bold red]❌ Failed to create directory: {e}. Using default instead.[/bold red]")
-        workspace_path = default_workspace
-        os.makedirs(workspace_path, exist_ok=True)
-
     console.input("\nPress Enter to view configuration summary...")
 
     # ── Summary Screen ─────────────────────────────────────────────────────────
@@ -340,6 +372,7 @@ def run_setup_wizard() -> bool:
     summary_text.append(f"AI Provider     : {provider.capitalize()}\n", style="white")
     summary_text.append(f"Coding Model    : {coding_model}\n", style="white")
     summary_text.append(f"Workspace Path  : {workspace_path}\n", style="white")
+    summary_text.append(f"Visual Theme    : {selected_theme.capitalize()}\n", style="white")
     summary_text.append(f"Config Location : {CONFIG_PATH}\n", style="dim")
     
     panel_sum = Panel(
@@ -369,6 +402,7 @@ def run_setup_wizard() -> bool:
         "assistant_model": assistant_model,
         "ollama_host": ollama_host,
         "workspace": workspace_path,
+        "theme": selected_theme,
     })
     if openrouter_key:
         settings["openrouter_api_key"] = openrouter_key
@@ -379,18 +413,61 @@ def run_setup_wizard() -> bool:
         ensure_gc_directories()
         save_settings(settings)
         
+        # Run final environment checks
+        rprint("\n[bold yellow]⚡ Running final environment diagnostics check...[/bold yellow]")
+        
+        internet_ok = False
+        try:
+            resp = requests.get("https://api.github.com", timeout=3)
+            internet_ok = resp.status_code == 200
+        except Exception:
+            internet_ok = False
+            
+        git_ok = False
+        try:
+            from github_companion.services.git_service import get_git_version
+            git_ok = bool(get_git_version())
+        except Exception:
+            git_ok = False
+            
+        provider_ok = False
+        if provider == "ollama":
+            try:
+                resp = requests.get(f"{ollama_host}/api/tags", timeout=3)
+                provider_ok = resp.status_code == 200
+            except Exception:
+                provider_ok = False
+        elif provider == "openrouter":
+            try:
+                valid_key = _validate_openrouter_key(openrouter_key)
+                provider_ok = valid_key
+            except Exception:
+                provider_ok = False
+        elif provider == "nvidia":
+            try:
+                valid_key = _validate_nvidia_key(nvidia_key)
+                provider_ok = valid_key
+            except Exception:
+                provider_ok = False
+
         # Success Screen
         console.clear()
         rprint()
         
+        from rich import box
         success_text = Text()
-        success_text.append("Configuration Saved ✓\n\n", style="bold green")
-        success_text.append("GitHub Companion is ready to use.\n\n", style="white")
+        success_text.append("🎉 Setup Complete / Congratulations!\n\n", style="bold green")
+        success_text.append("GitHub Companion is configured and verified.\n\n", style="white")
+        success_text.append("Environment Diagnostics:\n", style="bold white")
+        success_text.append(f"  Internet Connectivity : {'[green]✓ Connected[/green]' if internet_ok else '[red]✗ Offline[/red]'}\n")
+        success_text.append(f"  Git CLI Installation  : {'[green]✓ Installed[/green]' if git_ok else '[red]✗ Missing[/red]'}\n")
+        success_text.append(f"  AI Provider Endpoints : {'[green]✓ Reachable[/green]' if provider_ok else '[yellow]⚠️ Unreachable[/yellow]'}\n\n")
         success_text.append("Happy Coding 🚀", style="bold purple")
         
         panel_ok = Panel(
             Align.center(success_text),
             border_style="green",
+            box=box.ROUNDED,
             expand=False,
             padding=(1, 4)
         )

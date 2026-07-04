@@ -1,7 +1,10 @@
 """Doctor command — diagnose development environment and configurations."""
 import requests
+import os
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich import box
 from rich import print as rprint
 
 from github_companion.services.config_service import (
@@ -11,6 +14,7 @@ from github_companion.services.config_service import (
     get_ollama_host,
     _load,
 )
+from github_companion.services.theme_service import get_active_theme_obj
 from github_companion.utils.ui import success, error, info, warning
 
 console = Console()
@@ -22,10 +26,13 @@ def doctor_cmd(args: list[str] = None) -> None:
         _doctor_ai()
         return
 
+    theme = get_active_theme_obj()
+    border_style = theme.border
+    header_style = theme.header
+    highlight_style = theme.highlight
+
     rprint()
-    rprint("[bold bright_white]GitHub Companion Diagnostic Doctor 🩺[/bold bright_white]")
-    rprint("[blue]" + "─" * 47 + "[/blue]")
-    rprint("[dim]Running system diagnostics...[/dim]\n")
+    rprint(f"[{header_style}]Running System Diagnostics...[/{header_style}]")
 
     # ── 1. Internet Connection ────────────────────────────────────────────────
     internet_ok = False
@@ -35,12 +42,6 @@ def doctor_cmd(args: list[str] = None) -> None:
             internet_ok = resp.status_code == 200
         except Exception:
             internet_ok = False
-
-    if internet_ok:
-        success("Internet Connection: Reachable")
-    else:
-        error("Internet Connection: Unreachable or offline")
-        warning("Please verify your internet connection. Diagnostic checks may fail.")
 
     # ── 2. Git Installation ───────────────────────────────────────────────────
     git_ok = False
@@ -55,23 +56,19 @@ def doctor_cmd(args: list[str] = None) -> None:
         except Exception:
             git_ok = False
 
-    if git_ok:
-        success(f"Git Installed: {git_version}")
-    else:
-        error("Git Installed: Not found in PATH. Please install Git.")
-
     # ── 3. GitHub Configuration & Token ────────────────────────────────────────
     username = get_github_username()
     token = get_github_token()
     github_ok = False
+    github_details = ""
 
     if not username:
-        error("GitHub Username: Not configured")
+        github_details += "❌ GitHub Username: Not configured\n"
     else:
-        info(f"GitHub Username: '{username}'")
+        github_details += f"ℹ️  GitHub Username: '{username}'\n"
 
     if not token:
-        error("GitHub Token: Not configured")
+        github_details += "❌ GitHub Token: Not configured\n"
     else:
         with console.status("[bold yellow]Validating GitHub Token...[/bold yellow]", spinner="dots"):
             try:
@@ -85,20 +82,20 @@ def doctor_cmd(args: list[str] = None) -> None:
                     login = data.get("login", "")
                     if login.lower() == username.lower():
                         github_ok = True
-                        success("GitHub Token: Valid & matches configured username")
+                        github_details += "✅ GitHub Token: Valid & matches username\n"
                     else:
-                        warning(f"GitHub Token: Token belongs to '{login}', not '{username}'")
+                        github_details += f"⚠️  GitHub Token: Token belongs to '{login}', not '{username}'\n"
                 elif resp.status_code == 401:
-                    error("GitHub Token: Unauthorized / Invalid token")
+                    github_details += "❌ GitHub Token: Unauthorized / Invalid token\n"
                 else:
-                    error(f"GitHub Token: Verification request returned status code {resp.status_code}")
+                    github_details += f"❌ GitHub Token: Verification failed with status {resp.status_code}\n"
             except Exception as e:
-                error(f"GitHub Token: Verification request failed: {e}")
+                github_details += f"❌ GitHub Token: Verification failed: {e}\n"
 
     # ── 4. AI Provider Diagnostics ─────────────────────────────────────────────
     settings = _load()
     provider = get_ai_provider()
-    info(f"Configured AI Provider: '{provider}'")
+    provider_details = f"Configured AI Provider: '{provider}'\n"
 
     # Ollama check
     ollama_host = get_ollama_host()
@@ -111,13 +108,12 @@ def doctor_cmd(args: list[str] = None) -> None:
             ollama_ok = False
 
     if ollama_ok:
-        success(f"Ollama Service: Running at {ollama_host}")
+        provider_details += f"✅ Ollama Service: Running at {ollama_host}\n"
     else:
         if provider == "ollama":
-            error(f"Ollama Service: Unreachable at {ollama_host}")
-            info("Please start Ollama locally using 'ollama serve'")
+            provider_details += f"❌ Ollama Service: Unreachable at {ollama_host} (Ollama serve may not be running)\n"
         else:
-            warning(f"Ollama Service: Offline at {ollama_host}")
+            provider_details += f"⚠️  Ollama Service: Offline at {ollama_host}\n"
 
     # OpenRouter check
     or_key = settings.get("openrouter_api_key", "")
@@ -131,29 +127,55 @@ def doctor_cmd(args: list[str] = None) -> None:
             except Exception:
                 or_ok = False
         if or_ok:
-            success("OpenRouter Config: Valid API Key & Reachable")
+            provider_details += "✅ OpenRouter Config: Valid API Key & Reachable\n"
         else:
-            error("OpenRouter Config: Invalid API Key or Unreachable")
+            provider_details += "❌ OpenRouter Config: Invalid API Key or Unreachable\n"
     else:
         if provider == "openrouter":
-            error("OpenRouter Config: API Key not set")
+            provider_details += "❌ OpenRouter Config: API Key not set\n"
         else:
-            info("OpenRouter Config: API Key not set (Ollama is primary)")
+            provider_details += "ℹ️  OpenRouter Config: API Key not set\n"
 
-    # Summary
-    rprint()
+    # Build the Diagnostic Panel
+    table = Table.grid(expand=True, padding=(0, 2))
+    table.add_column(style=f"bold {highlight_style}", width=25)
+    table.add_column(style="white")
+
+    table.add_row("Internet Status:", "✅ Online / Reachable" if internet_ok else "❌ Offline / Unreachable")
+    table.add_row("Git Installation:", f"✅ {git_version}" if git_ok else "❌ Not found in PATH")
+    table.add_row("GitHub Auth:", github_details.strip())
+    table.add_row("AI Provider Config:", provider_details.strip())
+
     if internet_ok and git_ok and github_ok and (ollama_ok or provider != "ollama"):
-        rprint("[bold green]  🎉 Diagnostics clean! GitHub Companion is ready to go.[/bold green]")
+        summary_msg = f"[bold green]🎉 Diagnostics clean! GitHub Companion is ready.[/bold green]"
     else:
-        rprint("[bold yellow]  ⚠️ Diagnostics found issues. Some features might not work correctly.[/bold yellow]")
+        summary_msg = f"[bold yellow]⚠️ Diagnostics found issues. Some features may be offline.[/bold yellow]"
+
+    main_table = Table.grid(expand=True)
+    main_table.add_row(table)
+    main_table.add_row(rprint)  # empty row
+    main_table.add_row(summary_msg)
+
+    panel = Panel(
+        main_table,
+        border_style=border_style,
+        box=box.ROUNDED,
+        title=f"[{header_style}] 🩺 Environment Diagnostics [/{header_style}]",
+        expand=False
+    )
+    console.print(panel)
     rprint()
 
 
 def _doctor_ai() -> None:
     """Run diagnostics on AI pipelines (doctor ai)."""
+    theme = get_active_theme_obj()
+    border_style = theme.border
+    header_style = theme.header
+    highlight_style = theme.highlight
+
     rprint()
-    rprint("[bold bright_white]AI Diagnostics 🩺[/bold bright_white]")
-    rprint("[blue]" + "─" * 47 + "[/blue]")
+    rprint(f"[{header_style}]Running AI Pipeline Diagnostics...[/{header_style}]")
 
     settings = _load()
     
@@ -202,7 +224,6 @@ def _doctor_ai() -> None:
                     "Content-Type": "application/json",
                     "accept": "application/json"
                 }
-                # Check models endpoint reachability and authentication
                 resp = requests.get("https://integrate.api.nvidia.com/v1/models", headers=headers, timeout=10)
                 nv_endpoint_ok = (resp.status_code != 404 and resp.status_code != 502)
                 if resp.status_code == 200:
@@ -211,7 +232,6 @@ def _doctor_ai() -> None:
                 elif resp.status_code == 401:
                     nv_auth_ok = False
                 
-                # Chat completions endpoint validation
                 payload = {
                     "model": "nvidia/llama-3.1-nemotron-51b-instruct",
                     "messages": [{"role": "user", "content": "Ping"}],
@@ -221,7 +241,6 @@ def _doctor_ai() -> None:
                 if resp_chat.status_code == 200:
                     nv_chat_ok = True
                 else:
-                    # Fallback to public free-tier model meta/llama-3.1-8b-instruct if default model is restricted
                     payload["model"] = "meta/llama-3.1-8b-instruct"
                     resp_chat_fallback = requests.post("https://integrate.api.nvidia.com/v1/chat/completions", headers=headers, json=payload, timeout=10)
                     if resp_chat_fallback.status_code == 200:
@@ -239,25 +258,38 @@ def _doctor_ai() -> None:
     nv_models = len([m for m in MODELS if m["provider"] == "nvidia"])
 
     # Table
-    table = Table(show_header=True, header_style="bold yellow", border_style="purple")
-    table.add_column("Provider", style="bold cyan")
+    table = Table(show_header=True, header_style=theme.table_header, border_style=border_style)
+    table.add_column("Provider", style=theme.command)
     table.add_column("Configured", style="white")
     table.add_column("Authentication", style="white")
-    table.add_column("Available Models", style="magenta")
+    table.add_column("Available Models", style=highlight_style)
     table.add_column("Connection Status", style="white")
 
     table.add_row("Ollama", ollama_configured, ollama_auth, str(ollama_models), ollama_status)
     table.add_row("OpenRouter", or_configured, or_auth, str(or_models), or_status)
     table.add_row("NVIDIA NIM", nv_configured, nv_auth, str(nv_models), nv_status)
 
-    console.print(table)
+    panel = Panel(
+        table,
+        border_style=border_style,
+        box=box.ROUNDED,
+        title=f"[{header_style}] 🩺 AI Provider Connection Diagnostics [/{header_style}]",
+        expand=False
+    )
+    console.print(panel)
     rprint()
 
     if nv_key:
-        rprint("[bold white]NVIDIA NIM Detailed Checks:[/bold white]")
-        rprint(f"  {'[green]✓[/green]' if nv_endpoint_ok else '[red]✗[/red]'} Endpoint reachable (https://integrate.api.nvidia.com/v1)")
-        rprint(f"  {'[green]✓[/green]' if nv_auth_ok else '[red]✗[/red]'} Authentication (API key validity)")
-        rprint(f"  {'[green]✓[/green]' if nv_models_ok else '[red]✗[/red]'} Available models metadata query")
-        rprint(f"  {'[green]✓[/green]' if nv_chat_ok else '[red]✗[/red]'} Chat completion endpoint (chat/completions response)")
+        nv_checks = []
+        nv_checks.append(f"  {'[green]✓[/green]' if nv_endpoint_ok else '[red]✗[/red]'} Endpoint reachable (integrate.api.nvidia.com)")
+        nv_checks.append(f"  {'[green]✓[/green]' if nv_auth_ok else '[red]✗[/red]'} Authentication validation (API key check)")
+        nv_checks.append(f"  {'[green]✓[/green]' if nv_models_ok else '[red]✗[/red]'} NIM metadata registry query")
+        nv_checks.append(f"  {'[green]✓[/green]' if nv_chat_ok else '[red]✗[/red]'} NIM chat engine test completions")
+        
+        console.print(Panel(
+            "\n".join(nv_checks),
+            title="[bold purple]NVIDIA NIM Detailed Checks[/bold purple]",
+            border_style=border_style,
+            expand=False
+        ))
         rprint()
-

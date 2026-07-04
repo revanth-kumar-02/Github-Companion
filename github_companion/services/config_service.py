@@ -81,18 +81,42 @@ def get_fallback_provider() -> str:
 # ── AI Models ──────────────────────────────────────────────────────────────────
 
 def get_coding_model() -> str:
-    """Return the model used for code generation tasks (default: 'qwen2.5-coder')."""
-    return _load().get("coding_model", "qwen2.5-coder")
+    """Return the model used for code generation tasks (default from registry)."""
+    val = _load().get("coding_model")
+    if not val:
+        try:
+            from github_companion.ai.model_registry import get_models_by_role
+            recs = [m for m in get_models_by_role("coding") if m.get("recommended")]
+            return recs[0]["model_id"] if recs else "qwen2.5-coder"
+        except Exception:
+            return "qwen2.5-coder"
+    return val
 
 
 def get_reasoning_model() -> str:
-    """Return the model used for reasoning/planning tasks (default: 'deepseek-r1')."""
-    return _load().get("reasoning_model", "deepseek-r1")
+    """Return the model used for reasoning/planning tasks (default from registry)."""
+    val = _load().get("reasoning_model")
+    if not val:
+        try:
+            from github_companion.ai.model_registry import get_models_by_role
+            recs = [m for m in get_models_by_role("planning") if m.get("recommended")]
+            return recs[0]["model_id"] if recs else "deepseek-r1"
+        except Exception:
+            return "deepseek-r1"
+    return val
 
 
 def get_assistant_model() -> str:
-    """Return the model used for general assistant tasks (default: 'llama3.3')."""
-    return _load().get("assistant_model", "llama3.3")
+    """Return the model used for general assistant tasks (default from registry)."""
+    val = _load().get("assistant_model")
+    if not val:
+        try:
+            from github_companion.ai.model_registry import get_models_by_role
+            recs = [m for m in get_models_by_role("assistant") if m.get("recommended")]
+            return recs[0]["model_id"] if recs else "llama3.3"
+        except Exception:
+            return "llama3.3"
+    return val
 
 
 # ── Provider-specific config ───────────────────────────────────────────────────

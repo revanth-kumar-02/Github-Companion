@@ -19,11 +19,10 @@ console = Console()
 
 def auth_cmd() -> None:
     """Interactive authentication command loop."""
+    from github_companion.services.theme_service import get_active_theme_obj
+    from rich import box
     while True:
-        rprint()
-        rprint("[bold bright_white]Authentication[/bold bright_white]")
-        rprint("[blue]" + "─" * 47 + "[/blue]")
-
+        theme = get_active_theme_obj()
         settings = _load()
         gh_user = settings.get("github_username", "")
         gh_tok = settings.get("github_token", "")
@@ -34,21 +33,31 @@ def auth_cmd() -> None:
         or_status = "[bold green]✓ Connected[/bold green]" if or_key else "[bold red]✗ Not Configured[/bold red]"
         nv_status = "[bold green]✓ Connected[/bold green]" if nv_key else "[bold red]✗ Not Configured[/bold red]"
 
-        rprint(f"  GitHub      : {gh_status}")
-        rprint(f"  OpenRouter  : {or_status}")
-        rprint(f"  NVIDIA NIM  : {nv_status}")
-        rprint()
+        content = []
+        content.append(f"  GitHub      : {gh_status}")
+        content.append(f"  OpenRouter  : {or_status}")
+        content.append(f"  NVIDIA NIM  : {nv_status}")
+        content.append("")
+        content.append("[bold white]Options:[/bold white]")
+        content.append(f"  [{theme.command}]1[/{theme.command}]. Configure GitHub")
+        content.append(f"  [{theme.command}]2[/{theme.command}]. Configure OpenRouter")
+        content.append(f"  [{theme.command}]3[/{theme.command}]. Configure NVIDIA NIM")
+        content.append(f"  [{theme.command}]4[/{theme.command}]. Test Connections")
+        content.append(f"  [{theme.command}]5[/{theme.command}]. Remove Credentials")
+        content.append(f"  [{theme.command}]6[/{theme.command}]. Back to GC shell")
+        
+        panel = Panel(
+            "\n".join(content),
+            title=f"[bold {theme.header}] Authentication Management [/bold {theme.header}]",
+            border_style=theme.border,
+            box=box.ROUNDED,
+            expand=False
+        )
+        console.print()
+        console.print(panel)
+        console.print()
 
-        rprint("[bold white]Options:[/bold white]")
-        rprint("  [bold cyan]1[/bold cyan]. Configure GitHub")
-        rprint("  [bold cyan]2[/bold cyan]. Configure OpenRouter")
-        rprint("  [bold cyan]3[/bold cyan]. Configure NVIDIA NIM")
-        rprint("  [bold cyan]4[/bold cyan]. Test Connections")
-        rprint("  [bold cyan]5[/bold cyan]. Remove Credentials")
-        rprint("  [bold cyan]6[/bold cyan]. Back to GC shell")
-        rprint()
-
-        choice = console.input("[bold yellow]Select option (1-6) : [/bold yellow]").strip()
+        choice = console.input(f"[{theme.prompt}]Select option (1-6) : [/{theme.prompt}]").strip()
 
         if choice == "1":
             _configure_github()

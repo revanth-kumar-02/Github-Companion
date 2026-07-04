@@ -70,16 +70,26 @@ def theme_cmd(args: list[str] = None) -> None:
         return
 
     # Interactive menu mode
-    rprint()
-    rprint(f"[{theme.header}]Visual Themes Configuration[/{theme.header}]")
-    rprint(f"[{theme.border}]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/{theme.border}]")
-    rprint(f"Current theme: [{theme.success}]{current}[/{theme.success}]\n")
-
-    rprint("Available Themes:")
+    from rich import box
+    from rich.panel import Panel
+    content = []
+    content.append(f"Current theme: [{theme.success}]{current}[/{theme.success}]")
+    content.append("")
+    content.append("Available Themes:")
     for idx, t in enumerate(available, start=1):
         is_active = " (active)" if t == current else ""
-        rprint(f"  [{theme.highlight}]{idx}[/{theme.highlight}]. [bold]{t}[/bold]{is_active}")
-    rprint()
+        content.append(f"  [{theme.highlight}]{idx}[/{theme.highlight}]. [bold]{t}[/bold]{is_active}")
+        
+    panel = Panel(
+        "\n".join(content),
+        border_style=theme.border,
+        box=box.ROUNDED,
+        title=f"[{theme.header}] Visual Themes Configuration [/{theme.header}]",
+        expand=False
+    )
+    console.print()
+    console.print(panel)
+    console.print()
 
     try:
         choice = console.input(f"[{theme.prompt}]Select a theme (enter name or number) : [/{theme.prompt}]").strip().lower()

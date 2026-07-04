@@ -1,5 +1,5 @@
 # ── Credentials & Secrets ─────────────────────────────────────────────────────
-config/settings.json
+github_companion/config/settings.json
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/

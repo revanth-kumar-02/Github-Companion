@@ -99,10 +99,14 @@ def start_shell():
         args = parts[1:]
 
         if cmd in commands:
-            if cmd in ("config", "doctor", "theme", "tutor"):
-                commands[cmd](args)
-            else:
-                commands[cmd]()
+            try:
+                if cmd in ("config", "doctor", "theme", "tutor"):
+                    commands[cmd](args)
+                else:
+                    commands[cmd]()
+            except Exception as e:
+                from github_companion.utils.ui import show_exception_panel
+                show_exception_panel(e, f"Shell Command execution failed: '{cmd}'")
             continue
 
         if cmd in ("exit", "quit"):

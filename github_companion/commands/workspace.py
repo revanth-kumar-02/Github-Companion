@@ -32,20 +32,30 @@ def show_gc_workspace():
             except Exception:
                 pass
 
-        rprint()
-        rprint("[bold bright_white]Workspace Management[/bold bright_white]")
-        rprint("[blue]" + "─" * 47 + "[/blue]")
-        rprint(f"  Workspace Location : [cyan]{workspace_path}[/cyan]")
-        rprint(f"  Total Projects     : [cyan]{len(projects)}[/cyan]")
-        rprint()
-
-        rprint("[bold white]Options:[/bold white]")
-        rprint("  [bold cyan]1[/bold cyan]. Open Workspace folder")
-        rprint("  [bold cyan]2[/bold cyan]. Change Workspace location")
-        rprint("  [bold cyan]3[/bold cyan]. Create New Project")
-        rprint("  [bold cyan]4[/bold cyan]. List Projects")
-        rprint("  [bold cyan]5[/bold cyan]. Back to GC shell")
-        rprint()
+        from github_companion.services.theme_service import get_active_theme_obj
+        theme = get_active_theme_obj()
+        from rich import box
+        content = []
+        content.append(f"  [{theme.highlight}]Workspace Location :[/{theme.highlight}] [cyan]{workspace_path}[/cyan]")
+        content.append(f"  [{theme.highlight}]Total Projects     :[/{theme.highlight}] [cyan]{len(projects)}[/cyan]")
+        content.append("")
+        content.append("[bold white]Options:[/bold white]")
+        content.append(f"  [{theme.command}]1[/{theme.command}]. Open Workspace folder")
+        content.append(f"  [{theme.command}]2[/{theme.command}]. Change Workspace location")
+        content.append(f"  [{theme.command}]3[/{theme.command}]. Create New Project")
+        content.append(f"  [{theme.command}]4[/{theme.command}]. List Projects")
+        content.append(f"  [{theme.command}]5[/{theme.command}]. Back to GC shell")
+        
+        panel = Panel(
+            "\n".join(content),
+            title=f"[bold {theme.header}] Workspace Management [/bold {theme.header}]",
+            border_style=theme.border,
+            box=box.ROUNDED,
+            expand=False
+        )
+        console.print()
+        console.print(panel)
+        console.print()
 
         choice = console.input("[bold yellow]Select option (1-5) : [/bold yellow]").strip()
 

@@ -1,15 +1,28 @@
 """Ask command — general AI chatbot mode for questions and explanations."""
+import datetime
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich import box
 from rich import print as rprint
 
 from github_companion.ai.agent import Agent
 from github_companion.ai.providers.base_provider import BaseProvider
 from github_companion.ai.providers.openrouter_provider import OpenRouterProvider
 from github_companion.ai.providers.nvidia_provider import NvidiaProvider
-from github_companion.utils.ui import error, success
+from github_companion.ai.providers.ollama_provider import OllamaProvider
+from github_companion.services.theme_service import get_active_theme_obj
+from github_companion.utils.ui import error, success, show_exception_panel
 
 console = Console()
+
+PROVIDER_DISPLAY_MAP = {
+    "openrouter": "OpenRouter",
+    "ollama": "Ollama",
+    "nvidia": "NVIDIA NIM",
+    "openai": "OpenAI API"
+}
 
 ASK_SYSTEM_PROMPT = """\
 You are GitHub Companion's AI Assistant — a helpful programming chatbot.
@@ -31,57 +44,112 @@ Rules:
 """
 
 
-def start_ask_mode() -> None:
-    """Enter the interactive Ask > prompt loop."""
+def _select_assistant_model() -> dict | None:
+    from github_companion.ai.model_registry import get_models_by_role
+    theme = get_active_theme_obj()
+    models = get_models_by_role("assistant")
+    
     rprint()
-    console.print(Panel(
-        "[bold purple]GitHub Companion — Ask Mode[/bold purple]\n\n"
-        "[white]Ask programming questions, discuss architecture, or ask for explanations.\n"
-        "This mode behaves like a chatbot and [bold red]never edits files or runs commands.[/bold red]\n\n[/white]"
-        "[dim]  Examples:\n"
-        "    How does git rebase work?\n"
-        "    Explain the MVC design pattern\n"
-        "    What is a class in Python?\n\n"
-        "  Commands:\n"
-        "    clear  — reset conversation memory\n"
-        "    back   — return to GC shell[/dim]",
-        title="[bold purple]💬 Ask Mode (Chatbot)[/bold purple]",
-        border_style="purple",
-        padding=(1, 2),
-    ))
-    rprint()
-
-    try:
-        agent = Agent()
-    except Exception as exc:
-        rprint(f"[bold red]❌ Failed to start Ask mode:[/bold red] {exc}")
-        return
-
+    rprint(f"[bold {theme.header}]Assistant Models[/bold {theme.header}]")
+    rprint(f"[bold {theme.border}]──────────────────────────────[/bold {theme.border}]")
+    
+    for idx, m in enumerate(models, start=1):
+        rec_prefix = "⭐ " if m.get("recommended") else ""
+        rprint(f"  {idx}. {rec_prefix}{m['display_name']}")
+        provider_disp = PROVIDER_DISPLAY_MAP.get(m['provider'].lower(), m['provider'].capitalize())
+        rprint(f"     Provider : {provider_disp}")
+        rprint()
+        
+    rprint(f"[bold {theme.border}]──────────────────────────────[/bold {theme.border}]")
+    rprint("[bold white]Select Model[/bold white]")
+    
     while True:
         try:
-            user_input = console.input("[bold purple]Ask > [/bold purple]").strip()
+            choice = console.input(f"[{theme.prompt}]> [/{theme.prompt}]").strip()
         except (KeyboardInterrupt, EOFError):
-            rprint("\n[dim]  Returning to GC shell...[/dim]")
-            break
-
-        if not user_input:
+            return None
+            
+        if not choice:
             continue
+            
+        try:
+            val = int(choice)
+            if 1 <= val <= len(models):
+                return models[val - 1]
+        except ValueError:
+            for m in models:
+                if m["display_name"].lower() == choice.lower() or m["model_id"].lower() == choice.lower():
+                    return m
+        
+        error("Invalid selection. Please choose a valid index or name.")
 
-        lower = user_input.lower()
 
-        if lower in ("exit", "quit", "back"):
-            rprint("[dim]  Returning to GC shell...[/dim]")
-            break
+def _display_session_header(model_entry: dict) -> None:
+    theme = get_active_theme_obj()
+    provider_disp = PROVIDER_DISPLAY_MAP.get(model_entry['provider'].lower(), model_entry['provider'].capitalize())
+    
+    content = Table.grid(expand=True, padding=(0, 2))
+    content.add_column(style=f"bold {theme.highlight}", width=15)
+    content.add_column(style="white")
+    
+    content.add_row("Assistant", "")
+    content.add_row("Model", model_entry["display_name"])
+    content.add_row("Provider", provider_disp)
+    content.add_row("Status", "Ready")
+    
+    main_group = Table.grid(expand=True)
+    main_group.add_row(Text("Assistant Session Started\n", style=f"bold {theme.header}"))
+    main_group.add_row(content)
+    main_group.add_row(Text("\n──────────────────────────────────────────────", style=theme.border))
+    main_group.add_row(Text("\nYou can now ask programming questions.\nType exit to end the assistant session.", style="dim"))
+    
+    panel = Panel(
+        main_group,
+        border_style=theme.border,
+        box=box.ROUNDED,
+        title=f"[bold {theme.header}] 💬 Assistant Session Started [/bold {theme.header}]",
+        expand=False
+    )
+    console.print()
+    console.print(panel)
+    console.print()
 
-        if lower == "clear":
-            agent.memory.clear()
-            rprint("[dim]  ✔ Conversation memory cleared.[/dim]")
-            rprint()
-            continue
 
-        # Run the agent with enable_tools=False so it cannot make tool calls
-        agent.run(user_input, system_prompt=ASK_SYSTEM_PROMPT, enable_tools=False)
+def _get_ollama_with_fallback(model_id: str) -> BaseProvider | None:
+    """Check if local Ollama is active, else prompt to retry, configure OpenRouter, or cancel."""
+    from github_companion.services.config_service import _load, save_settings, get_ollama_host
+    from github_companion.services.setup_wizard import ensure_openrouter_authenticated
+    while True:
+        ollama = OllamaProvider(model_id, host=get_ollama_host())
+        if ollama.health_check():
+            return ollama
+
+        rprint(f"\n[bold yellow]Ollama is not installed or offline.[/bold yellow]")
+        rprint("Would you like to:")
+        rprint("  [bold cyan]1[/bold cyan]. Configure OpenRouter")
+        rprint("  [bold cyan]2[/bold cyan]. Retry")
+        rprint("  [bold cyan]3[/bold cyan]. Cancel")
         rprint()
+
+        try:
+            sub_choice = console.input("[bold purple]> [/bold purple]").strip()
+        except (KeyboardInterrupt, EOFError):
+            return None
+            
+        if sub_choice == "1":
+            try:
+                key = ensure_openrouter_authenticated()
+                settings = _load()
+                settings["provider"] = "openrouter"
+                save_settings(settings)
+                return OpenRouterProvider(model_id, api_key=key)
+            except Exception as e:
+                rprint(f"[bold red]❌ Config error: {e}[/bold red]")
+                continue
+        elif sub_choice == "2":
+            continue
+        else:
+            return None
 
 
 def _build_provider_for_model(model_entry: dict) -> BaseProvider | None:
@@ -89,9 +157,7 @@ def _build_provider_for_model(model_entry: dict) -> BaseProvider | None:
     model_id = model_entry["model_id"]
     
     if provider_name == "ollama":
-        from github_companion.services.config_service import get_ollama_host
-        from github_companion.ai.providers.ollama_provider import OllamaProvider
-        return OllamaProvider(model_name=model_id, host=get_ollama_host())
+        return _get_ollama_with_fallback(model_id)
         
     elif provider_name == "openrouter":
         from github_companion.services.setup_wizard import ensure_openrouter_authenticated
@@ -114,79 +180,83 @@ def _build_provider_for_model(model_entry: dict) -> BaseProvider | None:
     return None
 
 
-def start_chat_mode() -> None:
-    """Choose assistant model and launch chat session (GC > chat)."""
-    from github_companion.ai.model_registry import get_models_by_role
-    rprint()
-    rprint("[bold bright_white]Assistant Models[/bold bright_white]")
-    rprint("[blue]" + "─" * 47 + "[/blue]")
-    
-    models = get_models_by_role("assistant")
-    for idx, m in enumerate(models, start=1):
-        rec_tag = " ⭐ [dim]Recommended[/dim]" if m.get("recommended") else ""
-        rprint(f"  [bold cyan]{idx}[/bold cyan]. {m['display_name']} (Provider: {m['provider'].upper()}){rec_tag}")
+def start_ask_mode() -> None:
+    """Enter the interactive Ask > prompt loop with model selection."""
+    model_entry = _select_assistant_model()
+    if not model_entry:
+        return
         
-    rprint()
-    choice = console.input("[bold yellow]Select assistant model number : [/bold yellow]").strip()
+    provider = _build_provider_for_model(model_entry)
+    if not provider:
+        return
+        
+    session_start_time = datetime.datetime.now()
+    message_count = 0
+    
+    _display_session_header(model_entry)
     
     try:
-        val = int(choice)
-        if 1 <= val <= len(models):
-            selected_provider = _build_provider_for_model(models[val - 1])
-        else:
-            error("Invalid selection.")
-            return
-    except ValueError:
-        error("Invalid selection.")
-        return
-
-    if not selected_provider:
-        return
-
-    rprint(f"[dim]  Selected: {selected_provider.name} ({selected_provider.model})[/dim]\n")
-
-    # Enter Chat / Ask Mode with the selected provider
-    console.print(Panel(
-        f"[bold purple]GitHub Companion — Chat Mode ({selected_provider.name})[/bold purple]\n\n"
-        "[white]Ask programming questions, discuss architecture, or ask for explanations.\n"
-        "This mode behaves like a chatbot and [bold red]never edits files or runs commands.[/bold red]\n\n[/white]"
-        "[dim]  Commands:\n"
-        "    clear  — reset conversation memory\n"
-        "    back   — return to GC shell[/dim]",
-        title="[bold purple]💬 Chat Mode[/bold purple]",
-        border_style="purple",
-        padding=(1, 2),
-    ))
-    rprint()
-
-    try:
-        agent = Agent(provider=selected_provider)
+        agent = Agent(provider=provider)
     except Exception as exc:
-        rprint(f"[bold red]❌ Failed to start Chat mode:[/bold red] {exc}")
+        show_exception_panel(exc, "Failed to start Assistant session")
         return
-
+        
     while True:
+        theme = get_active_theme_obj()
+        
+        elapsed = datetime.datetime.now() - session_start_time
+        total_seconds = int(elapsed.total_seconds())
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        duration_str = f"{minutes:02d}:{seconds:02d}"
+        
+        provider_disp = PROVIDER_DISPLAY_MAP.get(model_entry['provider'].lower(), model_entry['provider'].capitalize())
+        
+        rprint(f"[dim][Model: {model_entry['display_name']} | Provider: {provider_disp} | Messages: {message_count} | Time: {duration_str}][/dim]")
+        
         try:
-            user_input = console.input("[bold purple]Chat > [/bold purple]").strip()
+            user_input = console.input(f"[{theme.prompt}]Ask > [/{theme.prompt}]").strip()
         except (KeyboardInterrupt, EOFError):
-            rprint("\n[dim]  Returning to GC shell...[/dim]")
+            rprint("\n[dim]  Ending session...[/dim]")
             break
-
+            
         if not user_input:
             continue
-
+            
         lower = user_input.lower()
-
+        
         if lower in ("exit", "quit", "back"):
-            rprint("[dim]  Returning to GC shell...[/dim]")
+            rprint("[dim]  Ending session...[/dim]")
             break
-
+            
         if lower == "clear":
             agent.memory.clear()
+            message_count = 0
+            session_start_time = datetime.datetime.now()
             rprint("[dim]  ✔ Conversation memory cleared.[/dim]")
             rprint()
             continue
-
-        agent.run(user_input, system_prompt=ASK_SYSTEM_PROMPT, enable_tools=False)
+            
+        if lower == "/model":
+            new_model_entry = _select_assistant_model()
+            if new_model_entry:
+                new_provider = _build_provider_for_model(new_model_entry)
+                if new_provider:
+                    model_entry = new_model_entry
+                    provider = new_provider
+                    agent.provider = new_provider
+                    rprint(f"[bold green]✓ Switched to model {model_entry['display_name']}[/bold green]")
+                    _display_session_header(model_entry)
+            continue
+            
+        try:
+            agent.run(user_input, system_prompt=ASK_SYSTEM_PROMPT, enable_tools=False)
+            message_count += 1
+        except Exception as e:
+            show_exception_panel(e, "Error during query execution")
         rprint()
 
+
+def start_chat_mode() -> None:
+    """Invokes the standard ask mode with model selection for visual consistency."""
+    start_ask_mode()

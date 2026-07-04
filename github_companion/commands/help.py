@@ -81,7 +81,16 @@ def show_help():
         table.add_row(styled_cmd, styled_category, desc)
         last_category = category
 
-    console.print(table)
+    from rich.panel import Panel
+    from rich import box
+    panel = Panel(
+        table,
+        border_style=border_style,
+        box=box.ROUNDED,
+        title=f"[{theme.header}] GitHub Companion Commands [/{theme.header}]",
+        expand=False
+    )
+    console.print(panel)
     rprint()
     rprint(f"[dim]  Run[/dim] [{theme.highlight}]gc[/{theme.highlight}] [dim]to enter the interactive shell.[/dim]")
     rprint()

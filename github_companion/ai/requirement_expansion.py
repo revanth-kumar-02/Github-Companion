@@ -14,7 +14,7 @@ console = Console()
 class RequirementExpansionEngine:
     """
     Intelligent Requirement Expansion Engine.
-    Infers gameplay, UI/UX, assets, technologies, and architecture before generating plans.
+    Infers gameplay/logic, UI/UX, assets, technologies, folder structure, accessibility, performance, testing, best practices, and architecture.
     """
 
     @staticmethod
@@ -26,6 +26,14 @@ Analyze the user's project request and perform a thorough intent expansion and r
 Identify all implicit, standard industry-grade features, assets, and UI components that are normally expected for a complete, production-ready product of this type.
 Do not assume minimal implementations. Think about modern UX, accessibility, aesthetics, error handling, state, gameplay/business logic, and styling.
 
+Specifically, infer the following key aspects even if the user has not explicitly requested them:
+1. UI & Design System (layouts, typography, color palette, custom styling, responsive structure)
+2. UX & Micro-interactions/Animations (hover states, animations, smooth transitions, loading cues)
+3. Accessibility (A11y) (semantic HTML, keyboard controls, contrast guidelines, screen readers)
+4. Performance & Resource Optimization (lazy loading, optimized rendering loops, asset compression)
+5. Testing & Quality Assurance (mock requirements, unit/integration test strategies)
+6. Best Practices & Architecture (code cleanliness, modular files, configuration, folder layouts)
+
 You MUST return ONLY a JSON code block inside markdown code tags (e.g. ```json ... ```).
 Do not output any introductory or conversational text, just the JSON block.
 
@@ -36,17 +44,15 @@ The JSON object must contain the following keys:
   "expanded_requirements": [
     {
       "category": "Gameplay / Core Logic",
-      "items": ["Bird physics & gravity", "Obstacle generation & speed ramping", "Score & high-score tracking", "Collision detection", "Restart & game loop"]
-    },
-    {
-      "category": "UI / UX and Layout",
-      "items": ["Modern start screen overlay", "Responsive canvas viewport", "Pause menu & settings", "Game over screen", "Smooth retro animation states", "CSS variables dark/light themes"]
-    },
-    {
-      "category": "Assets & Resources",
-      "items": ["Sprite sheet for bird states", "Background scenery tiles", "Clouds / ground decoration particles", "Sound effects for jump, score, collision", "Retro Google Fonts"]
+      "items": ["Item 1", "Item 2"]
     }
   ],
+  "ui_design_system": ["Layout grids & alignment", "Color palette HSL", "Typography selections"],
+  "ux_animations": ["Smooth animations/transitions", "Micro-interactions on hover"],
+  "accessibility_a11y": ["Semantic HTML elements", "Keyboard control maps"],
+  "performance_optimization": ["Optimized canvas loops", "Memory leak protection"],
+  "testing_qa": ["Unit test structures", "Validation criteria"],
+  "best_practices": ["Configuration separation", "Clean code standards"],
   "recommended_tech_stack": {
     "language": "JavaScript / Python / etc.",
     "libraries": "Vanilla JS, CSS3, Canvas API",
@@ -55,15 +61,7 @@ The JSON object must contain the following keys:
   "recommended_structure": [
     {
       "path": "index.html",
-      "explanation": "Main entry point with game canvas container and start screen overlays"
-    },
-    {
-      "path": "style.css",
-      "explanation": "Custom variables, premium aesthetics, overlays transitions, responsive layout styling"
-    },
-    {
-      "path": "game.js",
-      "explanation": "Main canvas game engine loop, sprites rendering, physics handler, collision, score state"
+      "explanation": "Explanation..."
     }
   ]
 }
@@ -102,21 +100,26 @@ The JSON object must contain the following keys:
     @staticmethod
     def display(spec: dict) -> None:
         """Display the expanded requirements beautifully using Rich."""
+        from github_companion.services.theme_service import get_active_theme_obj
+        theme = get_active_theme_obj()
+        border_style = theme.border
+        highlight_style = theme.highlight
+        header_style = theme.header
+        
         rprint()
-        rprint("[bold yellow]====================================================[/bold yellow]")
-        rprint("[bold yellow]        INTELLIGENT REQUIREMENT EXPANSION          [/bold yellow]")
-        rprint("[bold yellow]====================================================[/bold yellow]")
+        rprint(f"[{theme.header}]====================================================[/{theme.header}]")
+        rprint(f"[{theme.header}]        INTELLIGENT REQUIREMENT EXPANSION          [/{theme.header}]")
+        rprint(f"[{theme.header}]====================================================[/{theme.header}]")
         rprint()
         
-        # Project Title and Intent Analysis
-        rprint(f"[bold cyan]Project Title   :[/bold cyan] {spec.get('inferred_project_title')}")
+        rprint(f"[bold {highlight_style}]Project Title   :[/bold {highlight_style}] {spec.get('inferred_project_title')}")
         rprint()
-        console.print(Panel(spec.get("intent_analysis", ""), title="[bold purple]Intent Analysis[/bold purple]", border_style="purple"))
+        console.print(Panel(spec.get("intent_analysis", ""), title="[bold purple]Intent Analysis[/bold purple]", border_style=border_style))
         rprint()
 
         # Inferred Requirements table
-        req_table = Table(show_header=True, header_style="bold yellow", border_style="purple")
-        req_table.add_column("Category", style="bold cyan", width=25)
+        req_table = Table(show_header=True, header_style="bold yellow", border_style=border_style)
+        req_table.add_column("Category", style=f"bold {highlight_style}", width=25)
         req_table.add_column("Inferred Features / Expectations", style="white")
         
         for category_dict in spec.get("expanded_requirements", []):
@@ -124,18 +127,33 @@ The JSON object must contain the following keys:
             cat_items = "\n".join(f"• {item}" for item in category_dict.get("items", []))
             req_table.add_row(cat_name, cat_items)
             
-        console.print(Panel(req_table, title="[bold purple]Inferred Specifications & Features[/bold purple]", border_style="purple"))
+        console.print(Panel(req_table, title="[bold purple]Inferred Specifications & Features[/bold purple]", border_style=border_style))
+        rprint()
+
+        # UI/UX/A11y Panel
+        design_table = Table(show_header=True, header_style="bold yellow", border_style=border_style, expand=True)
+        design_table.add_column("System Aspect", style=f"bold {highlight_style}", width=25)
+        design_table.add_column("Specifications", style="white")
+        
+        design_table.add_row("UI & Design System", "\n".join(f"• {x}" for x in spec.get("ui_design_system", ["N/A"])))
+        design_table.add_row("UX & Animations", "\n".join(f"• {x}" for x in spec.get("ux_animations", ["N/A"])))
+        design_table.add_row("Accessibility (A11y)", "\n".join(f"• {x}" for x in spec.get("accessibility_a11y", ["N/A"])))
+        design_table.add_row("Performance Optimization", "\n".join(f"• {x}" for x in spec.get("performance_optimization", ["N/A"])))
+        design_table.add_row("Testing & QA Strategy", "\n".join(f"• {x}" for x in spec.get("testing_qa", ["N/A"])))
+        design_table.add_row("Best Practices", "\n".join(f"• {x}" for x in spec.get("best_practices", ["N/A"])))
+        
+        console.print(Panel(design_table, title="[bold purple]Inferred Engineering & Architectural Strategies[/bold purple]", border_style=border_style))
         rprint()
 
         # Technology recommendations
         tech = spec.get("recommended_tech_stack", {})
-        tech_table = Table(show_header=True, header_style="bold yellow", border_style="purple")
-        tech_table.add_column("Component", style="bold cyan")
+        tech_table = Table(show_header=True, header_style="bold yellow", border_style=border_style)
+        tech_table.add_column("Component", style=f"bold {highlight_style}")
         tech_table.add_column("Details", style="white")
         tech_table.add_row("Language", tech.get("language", "N/A"))
         tech_table.add_row("Libraries/API", tech.get("libraries", "N/A"))
         tech_table.add_row("Rationale", tech.get("explanation", "N/A"))
-        console.print(Panel(tech_table, title="[bold purple]Recommended Tech Stack & UI/UX Strategy[/bold purple]", border_style="purple", expand=False))
+        console.print(Panel(tech_table, title="[bold purple]Recommended Tech Stack & UI/UX Strategy[/bold purple]", border_style=border_style, expand=False))
         rprint()
 
         # Recommended Project Structure
@@ -145,5 +163,5 @@ The JSON object must contain the following keys:
             explanation = file_entry.get("explanation", "")
             tree.add(f"[green]{path}[/green] - [dim]{explanation}[/dim]")
             
-        console.print(Panel(tree, title="[bold purple]Inferred Architecture / Project Structure[/bold purple]", border_style="purple"))
+        console.print(Panel(tree, title="[bold purple]Inferred Architecture / Project Structure[/bold purple]", border_style=border_style))
         rprint()
