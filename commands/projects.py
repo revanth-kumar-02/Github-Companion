@@ -1,7 +1,6 @@
 """Projects command — manage generated projects in GC-Projects."""
 import os
 import platform
-import subprocess
 from rich.console import Console
 from rich import print as rprint
 from rich.panel import Panel
@@ -98,21 +97,17 @@ def _project_actions_menu(workspace_path: str, project_name: str) -> None:
         action = console.input("[bold yellow]Select action (1-9) : [/bold yellow]").strip()
 
         if action == "1":
-            import platform
+            from services.system_service import open_directory
             try:
-                if platform.system() == "Windows":
-                    os.startfile(project_path)
-                elif platform.system() == "Darwin":
-                    subprocess.Popen(["open", project_path])
-                else:
-                    subprocess.Popen(["xdg-open", project_path])
+                open_directory(project_path)
                 success("Project folder opened.")
             except Exception as e:
                 error(f"Could not open project: {e}")
 
         elif action == "2":
+            from services.system_service import launch_vscode
             try:
-                subprocess.Popen(["code", project_path], shell=True)
+                launch_vscode(project_path)
                 success("VS Code launched.")
             except Exception as e:
                 error(f"Could not open in VS Code: {e}")
@@ -129,18 +124,9 @@ def _project_actions_menu(workspace_path: str, project_name: str) -> None:
 
             if entry:
                 rprint(f"[bold yellow]Running Project ({entry})...[/bold yellow]")
+                from services.system_service import run_project_file
                 try:
-                    if entry.endswith(".py"):
-                        if platform.system() == "Windows":
-                            py_path = f'"{platform.sys.executable}"'
-                            subprocess.Popen(["start", "cmd", "/k", f'{py_path} "{entry}"'], cwd=project_path, shell=True)
-                        else:
-                            subprocess.Popen([platform.sys.executable, entry], cwd=project_path)
-                    elif entry.endswith(".js"):
-                        if platform.system() == "Windows":
-                            subprocess.Popen(["start", "cmd", "/k", f'node "{entry}"'], cwd=project_path, shell=True)
-                        else:
-                            subprocess.Popen(["node", entry], cwd=project_path)
+                    run_project_file(project_path, entry)
                     success("Project run command launched in a separate window.")
                 except Exception as e:
                     error(f"Failed to run project: {e}")
@@ -148,11 +134,11 @@ def _project_actions_menu(workspace_path: str, project_name: str) -> None:
                 error("No run entry point (app.py, main.py, or index.js) found.")
 
         elif action == "4":
-            from services.git_service import git_push, git_remote_add
+            from services.git_service import git_push, git_remote_add, git_remote
             from services.github_service import repo_create
             
-            res = subprocess.run(["git", "remote", "-v"], cwd=project_path, capture_output=True, text=True)
-            if "origin" in res.stdout:
+            remote_out = git_remote(project_path)
+            if "origin" in remote_out:
                 rprint("[bold yellow]Origin remote already exists. Pushing...[/bold yellow]")
                 try:
                     git_push(project_path)
@@ -237,8 +223,9 @@ def _project_actions_menu(workspace_path: str, project_name: str) -> None:
             info_table.add_row("Files Count", str(len(files)))
             info_table.add_row("Total LOC", f"{loc} lines")
             
-            res = subprocess.run(["git", "log", "-n", "1", "--oneline"], cwd=project_path, capture_output=True, text=True)
-            info_table.add_row("Last Commit", res.stdout.strip() or "No Commits")
+            from services.git_service import git_log_oneline
+            log_out = git_log_oneline(project_path)
+            info_table.add_row("Last Commit", log_out.strip() or "No Commits")
             
             console.print(Panel(info_table, title="Project Details", border_style="cyan", expand=False))
 

@@ -50,15 +50,9 @@ def show_gc_workspace():
         choice = console.input("[bold yellow]Select option (1-5) : [/bold yellow]").strip()
 
         if choice == "1":
-            import platform
-            import subprocess
+            from services.system_service import open_directory
             try:
-                if platform.system() == "Windows":
-                    os.startfile(workspace_path)
-                elif platform.system() == "Darwin":
-                    subprocess.Popen(["open", workspace_path])
-                else:
-                    subprocess.Popen(["xdg-open", workspace_path])
+                open_directory(workspace_path)
                 success("Workspace folder opened.")
             except Exception as e:
                 error(f"Could not open workspace: {e}")

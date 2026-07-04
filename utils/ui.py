@@ -1,6 +1,8 @@
 from rich import print
+from services.theme_service import get_active_theme_obj
 
 def header():
+    theme = get_active_theme_obj()
     banner = r"""
  ██████╗  ██████╗
 ██╔════╝ ██╔════╝
@@ -10,22 +12,27 @@ def header():
  ╚═════╝ ╚═════╝
     """
 
-    print(f"[blue]{banner}[/blue]")
-    print("[bold white]GitHub Companion[/bold white]")
+    print(f"[{theme.banner}]{banner}[/{theme.banner}]")
+    print(f"[{theme.header}]GitHub Companion[/{theme.header}]")
     print("[dim]Developer CLI • v0.1.1[/dim]")
-    print("[blue]" + "─" * 42 + "[/blue]")
-
+    print(f"[{theme.border}]" + "─" * 42 + f"[/{theme.border}]")
 
 
 def success(message):
-    print(f"[bold green]✅ {message}[/bold green]")   
-    
+    theme = get_active_theme_obj()
+    print(f"[{theme.success}]✅ {message}[/{theme.success}]")   
+
+
 def warning(message):
-    print(f"[bold yellow]⚠️ {message}[/bold yellow]")
+    theme = get_active_theme_obj()
+    print(f"[{theme.warning}]⚠️ {message}[/{theme.warning}]")
 
 
 def error(message):
-    print(f"[bold red]❌ {message}[/bold red]")
+    theme = get_active_theme_obj()
+    print(f"[{theme.error}]❌ {message}[/{theme.error}]")
+
 
 def info(message):
-    print(f"[bold cyan]ℹ️ {message}[/bold cyan]")
+    theme = get_active_theme_obj()
+    print(f"[{theme.highlight}]ℹ️ {message}[/{theme.highlight}]")

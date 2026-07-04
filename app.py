@@ -37,6 +37,9 @@ from commands.doctor import doctor_cmd
 from commands.auth import auth_cmd
 from commands.workspace import show_gc_workspace
 from commands.projects import show_gc_projects
+from commands.theme import theme_cmd
+from commands.tutor import tutor_cmd
+from commands.clone import clone_repo
 from utils.ui import header
 from shell import start_shell
 
@@ -86,11 +89,14 @@ def main():
         "auth": auth_cmd,
         "workspace": show_gc_workspace,
         "projects": show_gc_projects,
+        "theme": theme_cmd,
+        "tutor": tutor_cmd,
+        "clone": clone_repo,
     }
 
 
     if command in commands:
-        if command in ("config", "doctor"):
+        if command in ("config", "doctor", "theme", "tutor"):
             commands[command](sys.argv[2:])
         else:
             commands[command]()

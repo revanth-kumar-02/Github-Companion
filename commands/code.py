@@ -644,10 +644,10 @@ def _execute_approved_plan(provider: BaseProvider, plan: dict) -> dict | None:
         rprint("[bold yellow]⚠ GitHub credentials not configured. Skipping repository creation & push.[/bold yellow]")
 
     # ── Launch VS Code ────────────────────────────────────────────────────────
-    import subprocess
+    from services.system_service import launch_vscode
     try:
         rprint("\n[bold purple]Launching VS Code...[/bold purple]")
-        subprocess.Popen(["code", project_path], shell=True)
+        launch_vscode(project_path)
         rprint("  [bold green]✓[/bold green] VS Code launched successfully.")
     except Exception as e:
         rprint(f"  [bold red]❌ Could not launch VS Code: {e}[/bold red]")
@@ -1305,8 +1305,8 @@ def _display_completion_report(plan: dict, project_path: str, generated_count: i
 
 def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dict) -> None:
     """Launch Reviewer Agent loop: check placeholder markers, verify syntax/compilation, and auto-fix."""
-    import subprocess
     import re
+    from services.system_service import compile_python_file
     rprint("\n[bold purple]🔎 Starting Self-Review & Project Validation...[/bold purple]")
     
     files = []
@@ -1347,7 +1347,7 @@ def _review_and_fix_project(provider: BaseProvider, project_path: str, plan: dic
             
             # 2. Syntax validation for Python files
             if fpath.endswith(".py"):
-                res = subprocess.run([sys.executable, "-m", "py_compile", full_path], capture_output=True, text=True)
+                res = compile_python_file(full_path)
                 if res.returncode != 0:
                     issues.append(f"Syntax error / Compilation failed:\n{res.stderr.strip()}")
                     
@@ -1467,7 +1467,7 @@ def _format_readme_dependencies(dependencies: list) -> str:
 
 def _run_project_tests(session: dict) -> tuple[int, str]:
     """Run tests or builds depending on tech stack and return exit code and output."""
-    import subprocess
+    from services.system_service import run_test_or_build
     import os
     
     ws = session["workspace_path"]
@@ -1493,14 +1493,14 @@ def _run_project_tests(session: dict) -> tuple[int, str]:
         cmd = ["git", "status"]
         
     rprint(f"[dim]Running command: {' '.join(cmd)}[/dim]")
-    res = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, shell=True)
+    res = run_test_or_build(cmd, cwd=ws, shell=True)
     
     output = f"Stdout:\n{res.stdout}\nStderr:\n{res.stderr}"
     
     # Fallback if npm test is not configured (common for template projects)
     if cmd == ["npm", "test"] and "no test specified" in res.stderr.lower():
         rprint("[dim]npm test not configured. Running npm run build as fallback...[/dim]")
-        res = subprocess.run(["npm", "run", "build"], cwd=ws, capture_output=True, text=True, shell=True)
+        res = run_test_or_build(["npm", "run", "build"], cwd=ws, shell=True)
         output = f"Stdout:\n{res.stdout}\nStderr:\n{res.stderr}"
         
     return res.returncode, output
@@ -1890,15 +1890,13 @@ def _get_workspace_files_list(project_path: str) -> list[str]:
 
 
 def get_git_status_in_dir(project_path: str) -> str:
-    import subprocess
-    res = subprocess.run(["git", "status"], cwd=project_path, capture_output=True, text=True)
-    return res.stdout or res.stderr
+    from services.git_service import git_status_in_dir
+    return git_status_in_dir(project_path)
 
 
 def git_undo_changes(project_path: str) -> None:
-    import subprocess
-    subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=project_path, capture_output=True)
-    subprocess.run(["git", "clean", "-fd"], cwd=project_path, capture_output=True)
+    from services.git_service import git_undo
+    git_undo(project_path)
 
 
 

@@ -1,5 +1,4 @@
 """Doctor command — diagnose development environment and configurations."""
-import subprocess
 import requests
 from rich.console import Console
 from rich.table import Table
@@ -48,10 +47,11 @@ def doctor_cmd(args: list[str] = None) -> None:
     git_version = "Unknown"
     with console.status("[bold yellow]Checking Git Installation...[/bold yellow]", spinner="dots"):
         try:
-            res = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
-            if res.returncode == 0:
+            from services.git_service import get_git_version
+            version = get_git_version()
+            if version:
                 git_ok = True
-                git_version = res.stdout.strip()
+                git_version = version.strip()
         except Exception:
             git_ok = False
 

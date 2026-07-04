@@ -40,6 +40,9 @@ from commands.doctor import doctor_cmd
 from commands.auth import auth_cmd
 from commands.workspace import show_gc_workspace
 from commands.projects import show_gc_projects
+from commands.theme import theme_cmd
+from commands.tutor import tutor_cmd
+from commands.clone import clone_repo
 
 console = Console()
 
@@ -71,16 +74,21 @@ commands = {
     "auth": auth_cmd,
     "workspace": show_gc_workspace,
     "projects": show_gc_projects,
+    "theme": theme_cmd,
+    "tutor": tutor_cmd,
+    "clone": clone_repo,
 }
 
 
 def start_shell():
     header()
     while True:
+        from services.theme_service import get_active_theme_obj
+        theme = get_active_theme_obj()
         try:
-            user_input = console.input("[bold blue]GC > [/bold blue]").strip()
+            user_input = console.input(f"[{theme.prompt}]GC > [/{theme.prompt}]").strip()
         except (KeyboardInterrupt, EOFError):
-            console.print("\n[green]Goodbye![/green]")
+            console.print(f"\n[{theme.success}]Goodbye![/{theme.success}]")
             break
 
         if not user_input:
@@ -91,17 +99,17 @@ def start_shell():
         args = parts[1:]
 
         if cmd in commands:
-            if cmd in ("config", "doctor"):
+            if cmd in ("config", "doctor", "theme", "tutor"):
                 commands[cmd](args)
             else:
                 commands[cmd]()
             continue
 
         if cmd in ("exit", "quit"):
-            console.print("[green]Goodbye![/green]")
+            console.print(f"[{theme.success}]Goodbye![/{theme.success}]")
             break
 
-        console.print(f"[red]Unknown command:[/red] {cmd}")
+        console.print(f"[{theme.error}]Unknown command:[/{theme.error}] {cmd}")
         console.print("Type 'help' to see available commands.")
 
 

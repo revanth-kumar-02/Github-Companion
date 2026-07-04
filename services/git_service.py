@@ -93,3 +93,41 @@ def git_remote(project_path):
         )
         
     return result.stdout
+
+
+def git_clone(clone_url: str, dest_path: str) -> subprocess.CompletedProcess:
+    """Clone a remote repository to a local folder destination."""
+    return subprocess.run(
+        ["git", "clone", clone_url, dest_path],
+        capture_output=True,
+        text=True
+    )
+
+
+def git_log_oneline(project_path: str) -> str:
+    """Get the latest commit in oneline format."""
+    result = subprocess.run(
+        ["git", "log", "-n", "1", "--oneline"],
+        cwd=project_path,
+        capture_output=True,
+        text=True
+    )
+    return result.stdout
+
+
+def git_status_in_dir(project_path: str) -> str:
+    """Get Git status in the context of a specific repository directory."""
+    result = subprocess.run(
+        ["git", "status"],
+        cwd=project_path,
+        capture_output=True,
+        text=True
+    )
+    return result.stdout or result.stderr
+
+
+def git_undo(project_path: str) -> None:
+    """Undo uncommitted local changes and untracked files/folders."""
+    subprocess.run(["git", "reset", "--hard", "HEAD"], cwd=project_path, capture_output=True)
+    subprocess.run(["git", "clean", "-fd"], cwd=project_path, capture_output=True)
+

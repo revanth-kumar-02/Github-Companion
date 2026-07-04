@@ -7,23 +7,28 @@ console = Console()
 
 
 def show_help():
+    from services.theme_service import get_active_theme_obj
+    theme = get_active_theme_obj()
+    header_style = theme.table_header
+    border_style = theme.border
+    category_styles = theme.category_colors
+
     rprint()
-    rprint("[bold bright_white]GitHub Companion — Available Commands[/bold bright_white]")
-    rprint("[blue]" + "─" * 47 + "[/blue]")
+    rprint(f"[{theme.header}]GitHub Companion — Available Commands[/{theme.header}]")
+    rprint(f"[{border_style}]" + "─" * 47 + f"[/{border_style}]")
     rprint()
 
     table = Table(
         show_header=True,
-        header_style="bold bright_white on #1a1a2e",
-        border_style="blue",
-        row_styles=["", "dim"],
-        padding=(0, 2),
+        header_style=header_style,
+        border_style=border_style,
+        padding=(0, 1),
         expand=False,
     )
 
-    table.add_column("Command",     style="bold cyan",    no_wrap=True, min_width=12)
-    table.add_column("Category",   style="bold yellow",  no_wrap=True, min_width=14)
-    table.add_column("Description",style="white",        no_wrap=False, min_width=36)
+    table.add_column("Command",     no_wrap=True, width=12)
+    table.add_column("Category",   no_wrap=True, width=14)
+    table.add_column("Description",style=theme.description,              no_wrap=False, width=50)
 
     rows = [
         # Info commands
@@ -37,6 +42,7 @@ def show_help():
         ("delete",    "Repository",   "Delete an existing GitHub repository"),
         ("rename",    "Repository",   "Rename a GitHub repository"),
         ("publish",   "Repository",   "Publish a local project folder to GitHub"),
+        ("clone",     "Repository",   "Clone a remote GitHub repository locally"),
         # Utilities
         ("search",    "Utility",      "Search your repositories by keyword"),
         ("readme",    "Utility",      "Interactively generate a README.md file"),
@@ -48,25 +54,34 @@ def show_help():
         # Workspace
         ("workspace", "Workspace",    "Manage default GC-Projects workspace location"),
         ("projects",  "Workspace",    "Manage and run generated projects in GC-Projects"),
+        ("theme",     "Workspace",    "Configure visual color theme presets"),
         # System
         ("auth",      "System",       "Manage GitHub and OpenRouter authentication credentials"),
         ("login",     "System",       "Reconfigure GitHub credentials"),
         ("logout",    "System",       "Remove GitHub credentials"),
         ("config",    "System",       "Display current settings. Try: 'config edit', 'config reset', 'config ai', 'config workspace'"),
         ("doctor",    "System",       "Diagnose Git, GitHub, Internet, and AI. Try: 'doctor ai'"),
+        ("tutor",     "System",       "Start interactive step-by-step developer tutorial"),
 
         ("version",   "System",       "Show installed Git version"),
         ("status",    "System",       "Show current Git status"),
         ("help",      "System",       "Show this help table"),
         ("exit",      "System",       "Exit the interactive shell"),
-
-
     ]
 
+    last_category = None
     for cmd, category, desc in rows:
-        table.add_row(cmd, category, desc)
+        if last_category is not None and category != last_category:
+            table.add_row("", "", "")
+        
+        style = category_styles.get(category, "white")
+        styled_cmd = f"[{style}]{cmd}[/{style}]"
+        styled_category = f"[{style}]{category}[/{style}]"
+        
+        table.add_row(styled_cmd, styled_category, desc)
+        last_category = category
 
     console.print(table)
     rprint()
-    rprint("[dim]  Run[/dim] [bold cyan]gc[/bold cyan] [dim]to enter the interactive shell, or[/dim] [bold cyan]python app.py <command>[/bold cyan] [dim]to run directly.[/dim]")
+    rprint(f"[dim]  Run[/dim] [{theme.highlight}]gc[/{theme.highlight}] [dim]to enter the interactive shell.[/dim]")
     rprint()
