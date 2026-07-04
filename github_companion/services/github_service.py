@@ -9,10 +9,22 @@ def get_github_profile():
     
 def get_github_repositories():
     username = get_github_username()
-    response = requests.get(f"{GITHUB_API}/users/{username}/repos")
-    repos = response.json()
-    for index,repo in enumerate(repos,start=1):
-        print(f"{index}. {repo['name']}")
+    token = get_github_token()
+    headers = {
+        "Accept": "application/vnd.github+json"
+    }
+    url = f"{GITHUB_API}/users/{username}/repos"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        url = f"{GITHUB_API}/user/repos"
+        
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+    except Exception:
+        pass
+    return []
 
 def fetch_repositories(limit: int = 30) -> list:
     """Return repository data as a list of dicts (used by AI tools layer)."""
