@@ -1,0 +1,4 @@
+include LICENSE
+include README.md
+recursive-include github_companion/config *.json *.md
+exclude github_companion/config/settings.json

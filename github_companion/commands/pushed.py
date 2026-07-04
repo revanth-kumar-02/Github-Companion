@@ -1,0 +1,20 @@
+from github_companion.services.git_service import get_git_status
+from github_companion.utils.ui import success
+from github_companion.utils.ui import warning
+from rich import print
+
+def show_gc_push():
+    status = get_git_status()
+    print()
+    print("Git Push Status")
+    print("[white]" + "─" * 47 + "[/white]")
+    print()
+    if "up to date" in status:
+        success("Latest commit is pushed.")
+    else:
+        warning(" Latest commit is NOT pushed.")
+    print()
+    print("[white]" + "─" * 47 + "[/white]")
+        
+        
+    
