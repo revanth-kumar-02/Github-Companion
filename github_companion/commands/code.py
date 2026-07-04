@@ -16,7 +16,7 @@ from github_companion.ai.providers.base_provider import BaseProvider
 from github_companion.ai.providers.ollama_provider import OllamaProvider
 from github_companion.ai.providers.openrouter_provider import OpenRouterProvider
 from github_companion.ai.providers.nvidia_provider import NvidiaProvider
-from github_companion.ai.requirement_expansion import RequirementExpansionEngine
+from github_companion.ai.engineering_analysis import EngineeringAnalysisEngine
 from github_companion.services.config_service import (
     get_custom_models,
     get_ollama_host,
@@ -144,13 +144,13 @@ def start_code_mode() -> None:
         error("Project idea cannot be empty.")
         return
 
-    # ── Requirement Expansion Stage ───────────────────────────────────────────
+    # ── Engineering Analysis Stage ────────────────────────────────────────────
     expanded_spec = None
-    with console.status("[bold yellow]Running Requirement Expansion Engine...[/bold yellow]", spinner="dots"):
-        expanded_spec = RequirementExpansionEngine.expand(provider, project_idea)
+    with console.status("[bold yellow]Running Engineering Analysis Engine...[/bold yellow]", spinner="dots"):
+        expanded_spec = EngineeringAnalysisEngine.analyze(provider, project_idea)
     
     if expanded_spec:
-        RequirementExpansionEngine.display(expanded_spec)
+        EngineeringAnalysisEngine.display(expanded_spec)
         rprint()
         proceed = console.input("[bold yellow]Proceed to detailed Implementation Planning? (y/n) [y]: [/bold yellow]").strip().lower()
         if proceed not in ("", "y", "yes"):
