@@ -1,3 +1,8 @@
+# Core Network and API requests
 requests>=2.31.0
+
+# Rich CLI Layouts, Tables, and Formatting
 rich>=13.0.0
+
+# OpenAI-Compatible AI Provider Clients (Ollama, OpenRouter, NVIDIA NIM)
 openai>=1.0.0
