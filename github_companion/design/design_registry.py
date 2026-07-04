@@ -1,8 +1,8 @@
 """Design Provider Registry for GitHub Companion.
 
-Manages available design providers, interactive selection during
-GC > code sessions, and automatic fallback when an external provider
-(e.g. Google Stitch) is unavailable.
+Google Stitch is the primary design provider.
+If Stitch is unavailable or not configured, the registry automatically
+falls back to the Internal AI Designer — no menu, no interruption.
 """
 from __future__ import annotations
 from rich.console import Console
@@ -84,102 +84,58 @@ def get_provider(provider_id: str, ai_provider=None) -> BaseDesigner | None:
     return None
 
 
-# ── Interactive selection ──────────────────────────────────────────────────────
+# ── Primary auto-resolution (no menu) ────────────────────────────────────────
 
-def select_design_provider(ai_provider) -> BaseDesigner:
+def get_active_designer(ai_provider) -> BaseDesigner:
     """
-    Display the interactive Design Provider selection menu and return
-    the chosen (and validated) provider.
+    Resolve and return the active Design Provider automatically.
 
-    If the selected provider fails health_check(), automatically falls back
-    to InternalDesigner with a warning notification.
+    Resolution order:
+        1. Google Stitch  — if api_key or mcp_server is configured AND health_check() passes
+        2. Internal AI Designer — silent fallback, always available
+
+    No menu is shown. Google Stitch is the primary provider. If Stitch is
+    unavailable or not yet configured, the session continues seamlessly with
+    the Internal AI Designer.
 
     Args:
-        ai_provider: The active AI BaseProvider (for InternalDesigner).
+        ai_provider: The active AI BaseProvider instance (used by InternalDesigner).
 
     Returns:
-        A ready-to-use BaseDesigner instance (never None — always falls back).
+        A ready-to-use BaseDesigner instance (never None).
     """
-    from github_companion.services.theme_service import get_active_theme_obj
-    theme = get_active_theme_obj()
+    from github_companion.design.internal_designer import InternalDesigner
+    from github_companion.services.config_service import (
+        get_stitch_api_key,
+        get_stitch_mcp_server,
+    )
 
-    providers = get_available_providers()
+    stitch_key = get_stitch_api_key()
+    stitch_mcp = get_stitch_mcp_server()
 
-    rprint()
-    rprint(f"[bold {theme.header}]Choose Design Provider[/bold {theme.header}]")
-    rprint(f"[{theme.border}]{'─' * 40}[/{theme.border}]")
-    rprint()
+    # Try Stitch only if credentials are present
+    if stitch_key or stitch_mcp:
+        from github_companion.design.stitch_provider import StitchProvider
+        stitch = StitchProvider(api_key=stitch_key, mcp_server=stitch_mcp)
 
-    for idx, p in enumerate(providers, start=1):
-        rec_tag = " [bold yellow]⭐ Recommended[/bold yellow]" if p["recommended"] else ""
-        cfg_tag = (
-            f" [bold green](Configured)[/bold green]"
-            if p["configured"]
-            else f" [dim](Not Configured)[/dim]"
-        )
+        with console.status("[bold yellow]Connecting to Google Stitch...[/bold yellow]", spinner="dots"):
+            available = stitch.health_check()
 
-        # Stitch-specific: add "not configured" clarification for new users
-        extra = ""
-        if p["id"] == "stitch" and not p["configured"]:
-            extra = "\n     [dim]Run 'auth' → Configure Google Stitch to set up credentials[/dim]"
+        if available:
+            rprint("[bold green]✓  Google Stitch connected.[/bold green]")
+            rprint()
+            return stitch
 
-        rprint(
-            f"  [{theme.command}]{idx}[/{theme.command}]. "
-            f"[bold white]{p['name']}[/bold white]{cfg_tag}{rec_tag}"
-        )
-        rprint(f"     [dim]{p['description']}[/dim]{extra}")
+        # Stitch configured but unreachable — notify and fall back
+        rprint("[bold yellow]⚠  Google Stitch unavailable. Switching to Internal Designer.[/bold yellow]")
         rprint()
 
-    choice = console.input(
-        f"[{theme.prompt}]Select Design Provider (1-{len(providers)}) [1]: [{theme.prompt}]"
-    ).strip()
+    # Default: Internal AI Designer (always available)
+    return InternalDesigner(ai_provider)
 
-    # Default to internal if user presses Enter
-    if not choice:
-        choice = "1"
 
-    try:
-        idx = int(choice)
-        if 1 <= idx <= len(providers):
-            selected = providers[idx - 1]
-        else:
-            rprint("[dim]  Invalid choice — defaulting to Internal AI Designer.[/dim]")
-            selected = providers[0]
-    except ValueError:
-        rprint("[dim]  Invalid input — defaulting to Internal AI Designer.[/dim]")
-        selected = providers[0]
+# ── Kept for backward compatibility ───────────────────────────────────────────
 
-    provider_id = selected["id"]
-    designer = get_provider(provider_id, ai_provider=ai_provider)
-
-    if designer is None:
-        rprint("[dim]  Could not instantiate selected provider — defaulting to Internal AI Designer.[/dim]")
-        from github_companion.design.internal_designer import InternalDesigner
-        return InternalDesigner(ai_provider)
-
-    # ── Health check with automatic fallback ──────────────────────────────────
-    if provider_id != "internal":
-        rprint()
-        with console.status(
-            f"[bold yellow]Checking {designer.name} availability...[/bold yellow]",
-            spinner="dots",
-        ):
-            available = designer.health_check()
-
-        if not available:
-            rprint()
-            rprint(
-                f"[bold yellow]⚠  {designer.name} is unavailable.[/bold yellow]"
-            )
-            rprint(
-                "[dim]   Switching to Internal AI Designer. Your coding session will continue normally.[/dim]"
-            )
-            rprint()
-            from github_companion.design.internal_designer import InternalDesigner
-            return InternalDesigner(ai_provider)
-
-        rprint(f"[bold green]✓  {designer.name} is connected and ready.[/bold green]")
-
-    rprint(f"[dim]  Design Provider: {designer.name}[/dim]")
-    rprint()
-    return designer
+def select_design_provider(ai_provider) -> BaseDesigner:
+    """Alias for get_active_designer(). Retained for backward compatibility."""
+    return get_active_designer(ai_provider)

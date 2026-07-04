@@ -17,7 +17,7 @@ from github_companion.ai.providers.ollama_provider import OllamaProvider
 from github_companion.ai.providers.openrouter_provider import OpenRouterProvider
 from github_companion.ai.providers.nvidia_provider import NvidiaProvider
 from github_companion.ai.engineering_analysis import EngineeringAnalysisEngine
-from github_companion.design.design_registry import select_design_provider
+from github_companion.design.design_registry import get_active_designer
 from github_companion.services.theme_service import get_active_theme_obj
 from github_companion.services.config_service import (
     get_custom_models,
@@ -159,8 +159,8 @@ def start_code_mode() -> None:
             rprint("[dim]  Cancelled by user.[/dim]")
             return
 
-    # ── Design Provider Selection & Generation ───────────────────────────────
-    designer = select_design_provider(provider)
+    # ── Design Provider (Stitch primary → Internal fallback) ──────────────────
+    designer = get_active_designer(provider)
 
     design_spec = None
     with console.status(
