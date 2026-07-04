@@ -1,5 +1,6 @@
 """Central visual theme registry for GitHub Companion."""
 
+
 class FixedComponentTheme:
     """Styles that remain constant regardless of the user's selected CLI theme to preserve platform branding."""
     GITHUB_HEATMAP = {
@@ -28,7 +29,9 @@ class CompanionTheme:
         prompt: str,
         border: str,
         highlight: str,
-        category_colors: dict
+        category_colors: dict,
+        link: str = "bright_blue",
+        muted: str = "grey70",
     ):
         self.name = name
         self.banner = banner
@@ -44,6 +47,8 @@ class CompanionTheme:
         self.border = border
         self.highlight = highlight
         self.category_colors = category_colors
+        self.link = link
+        self.muted = muted
 
 
 THEMES = {
@@ -61,6 +66,8 @@ THEMES = {
         prompt="bold blue",
         border="dim cyan",
         highlight="bright_cyan",
+        link="bright_blue",
+        muted="grey70",
         category_colors={
             "GitHub": "bold bright_cyan",
             "Repository": "bold hot_pink",
@@ -84,6 +91,8 @@ THEMES = {
         prompt="bold purple",
         border="purple",
         highlight="bright_purple",
+        link="bright_cyan",
+        muted="grey70",
         category_colors={
             "GitHub": "bold bright_cyan",
             "Repository": "bold purple",
@@ -107,6 +116,8 @@ THEMES = {
         prompt="bold blue",
         border="blue",
         highlight="bright_cyan",
+        link="bright_blue",
+        muted="grey70",
         category_colors={
             "GitHub": "bold bright_cyan",
             "Repository": "bold blue",
@@ -118,25 +129,27 @@ THEMES = {
     ),
     "synthwave": CompanionTheme(
         name="synthwave",
-        banner="bold bright_magenta",        # #ff00ff  — logo
-        header="bold bright_cyan",           # #00ffff  — section titles / GC title
-        table_header="bold bright_magenta",  # magenta  — table headers
-        command="bold bright_cyan",          # cyan     — command names
-        category="bold bright_cyan",         # cyan     — category labels
-        description="white",                 # white    — body values
-        success="bold bright_green",         # #39ff14  — success messages
-        warning="bold bright_yellow",        # yellow   — warnings
-        error="bold bright_red",             # red      — errors
-        prompt="bold bright_magenta",        # magenta  — GC > prompt
-        border="bright_magenta",             # magenta  — dividers / borders
-        highlight="bright_cyan",             # cyan     — highlighted values
+        banner="bold #FF10F0",           # Neon pink  — GC logo
+        header="bold #00F5FF",           # Neon cyan  — section titles / GC title
+        table_header="bold #FF10F0",     # Neon pink  — table headers
+        command="bold #00F5FF",          # Neon cyan  — command names
+        category="bold #00F5FF",         # Neon cyan  — category labels
+        description="#FFFFFF",           # White      — body values
+        success="bold #39FF14",          # Neon green — success messages
+        warning="bold #FFD300",          # Neon amber — warnings
+        error="bold #FF3131",            # Neon red   — errors
+        prompt="bold #FF10F0",           # Neon pink  — GC > prompt
+        border="#FF10F0",                # Neon pink  — dividers / borders
+        highlight="#00F5FF",             # Neon cyan  — highlighted values
+        link="#00AFFF",                  # Electric blue — hyperlinks
+        muted="#A0A0A0",                 # Grey       — muted labels
         category_colors={
-            "GitHub":     "bold bright_cyan",
-            "Repository": "bold bright_magenta",
-            "Utility":    "bold bright_yellow",
-            "AI Agent":   "bold bright_red",
-            "Workspace":  "bold bright_green",
-            "System":     "bold bright_magenta",
+            "GitHub":     "bold #00F5FF",
+            "Repository": "bold #FF10F0",
+            "Utility":    "bold #FFD300",
+            "AI Agent":   "bold #FF3131",
+            "Workspace":  "bold #39FF14",
+            "System":     "bold #FF10F0",
         }
     ),
     "monokai": CompanionTheme(
@@ -153,6 +166,8 @@ THEMES = {
         prompt="bold magenta",
         border="yellow",
         highlight="cyan",
+        link="bright_blue",
+        muted="grey70",
         category_colors={
             "GitHub": "bold cyan",
             "Repository": "bold red",

@@ -77,29 +77,29 @@ def show_dashboard():
     left_side = Text()
     left_side.append("🔧 ENVIRONMENT\n", style=f"bold {theme.highlight}")
     left_side.append("  Version   : ", style="bold white")
-    left_side.append("v0.1.1\n", style="white")
+    left_side.append("v0.1.1\n", style=theme.description)
     left_side.append("  Workspace : ", style="bold white")
-    left_side.append(f"{workspace}\n", style="cyan")
+    left_side.append(f"{workspace}\n", style=theme.highlight)
     left_side.append("  User      : ", style="bold white")
-    left_side.append(f"{username} ({auth_status})\n", style="green" if auth_status == "Authenticated" else "yellow")
+    left_side.append(f"{username} ({auth_status})\n", style=theme.success if auth_status == "Authenticated" else theme.warning)
     
     right_side = Text()
     right_side.append("🤖 AI SETTINGS\n", style=f"bold {theme.highlight}")
     right_side.append("  Provider  : ", style="bold white")
-    right_side.append(f"{provider.upper()}\n", style="cyan")
+    right_side.append(f"{provider.upper()}\n", style=theme.highlight)
     right_side.append("  Model     : ", style="bold white")
-    right_side.append(f"{model}\n", style="cyan")
+    right_side.append(f"{model}\n", style=theme.highlight)
     right_side.append("  Theme     : ", style="bold white")
-    right_side.append(f"{theme.name.capitalize()}\n", style="green")
+    right_side.append(f"{theme.name.capitalize()}\n", style=theme.success)
     
     dashboard_table.add_row(left_side, right_side)
     
     status_text = Text()
     status_text.append("\n🩺 SYSTEM STATUS\n", style=f"bold {theme.highlight}")
     status_text.append("  Git CLI   : ", style="bold white")
-    status_text.append(f"{git_status}\n", style="green" if "Installed" in git_status else "red")
+    status_text.append(f"{git_status}\n", style=theme.success if "Installed" in git_status else theme.error)
     status_text.append("  Status    : ", style="bold white")
-    status_text.append("Ready for action ⚡", style="bold green")
+    status_text.append("Ready for action ⚡", style=f"bold {theme.success}")
     
     main_group = Table.grid(expand=True)
     main_group.add_row(banner_text)
@@ -228,7 +228,7 @@ def show_exception_panel(exc, context_info=None):
     
     if debug_mode:
         trace_str = traceback.format_exc()
-        trace_panel = Panel(trace_str, title="[bold red]Technical Details (Debug)[/bold red]", border_style="red", box=box.ROUNDED)
+        trace_panel = Panel(trace_str, title=f"[bold {theme.error}]Technical Details (Debug)[/bold {theme.error}]", border_style=theme.error, box=box.ROUNDED)
         main_table.add_row(Text("\n"))
         main_table.add_row(trace_panel)
         
