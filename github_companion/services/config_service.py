@@ -142,6 +142,21 @@ def get_nvidia_api_key() -> str:
     return key
 
 
+# ── Google Stitch Design Provider ──────────────────────────────────────────────
+
+def get_stitch_api_key() -> str:
+    """Return the Google Stitch API key, or empty string if not configured."""
+    key = _load().get("stitch_api_key", "")
+    if key in ("YOUR_STITCH_KEY_HERE", "YOUR_KEY"):
+        return ""
+    return key
+
+
+def get_stitch_mcp_server() -> str:
+    """Return the Google Stitch MCP server name, or empty string if not set."""
+    return _load().get("stitch_mcp_server", "")
+
+
 
 
 def save_settings(settings: dict) -> None:

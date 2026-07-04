@@ -1,6 +1,5 @@
-"""Auth command — configure and verify GitHub and AI provider credentials."""
+"""Auth command — configure and verify GitHub, AI provider, and Design Provider credentials."""
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 from rich import print as rprint
 
@@ -11,7 +10,11 @@ from github_companion.services.setup_wizard import (
     _validate_openrouter_key,
     _validate_nvidia_key,
 )
-from github_companion.services.config_service import get_nvidia_api_key
+from github_companion.services.config_service import (
+    get_nvidia_api_key,
+    get_stitch_api_key,
+    get_stitch_mcp_server,
+)
 from github_companion.utils.ui import success, error, info, warning
 
 console = Console()
@@ -20,7 +23,6 @@ console = Console()
 def auth_cmd() -> None:
     """Interactive authentication command loop."""
     from github_companion.services.theme_service import get_active_theme_obj
-    from rich import box
     while True:
         theme = get_active_theme_obj()
         settings = _load()
@@ -28,24 +30,29 @@ def auth_cmd() -> None:
         gh_tok = settings.get("github_token", "")
         or_key = settings.get("openrouter_api_key", "")
         nv_key = settings.get("nvidia_api_key", "")
+        st_key = settings.get("stitch_api_key", "")
+        st_mcp = settings.get("stitch_mcp_server", "")
 
         gh_status = "[bold green]✓ Connected[/bold green]" if (gh_user and gh_tok) else "[bold red]✗ Not Configured[/bold red]"
         or_status = "[bold green]✓ Connected[/bold green]" if or_key else "[bold red]✗ Not Configured[/bold red]"
         nv_status = "[bold green]✓ Connected[/bold green]" if nv_key else "[bold red]✗ Not Configured[/bold red]"
+        st_status = "[bold green]✓ Connected[/bold green]" if (st_key or st_mcp) else "[bold red]✗ Not Configured[/bold red]"
 
         content = []
-        content.append(f"  GitHub      : {gh_status}")
-        content.append(f"  OpenRouter  : {or_status}")
-        content.append(f"  NVIDIA NIM  : {nv_status}")
+        content.append(f"  GitHub        : {gh_status}")
+        content.append(f"  OpenRouter    : {or_status}")
+        content.append(f"  NVIDIA NIM    : {nv_status}")
+        content.append(f"  Google Stitch : {st_status}")
         content.append("")
         content.append("[bold white]Options:[/bold white]")
         content.append(f"  [{theme.command}]1[/{theme.command}]. Configure GitHub")
         content.append(f"  [{theme.command}]2[/{theme.command}]. Configure OpenRouter")
         content.append(f"  [{theme.command}]3[/{theme.command}]. Configure NVIDIA NIM")
-        content.append(f"  [{theme.command}]4[/{theme.command}]. Test Connections")
-        content.append(f"  [{theme.command}]5[/{theme.command}]. Remove Credentials")
-        content.append(f"  [{theme.command}]6[/{theme.command}]. Back to GC shell")
-        
+        content.append(f"  [{theme.command}]4[/{theme.command}]. Configure Google Stitch")
+        content.append(f"  [{theme.command}]5[/{theme.command}]. Test Connections")
+        content.append(f"  [{theme.command}]6[/{theme.command}]. Remove Credentials")
+        content.append(f"  [{theme.command}]7[/{theme.command}]. Back to GC shell")
+
         console.print()
         console.print(f"[bold {theme.header}]Authentication Management[/bold {theme.header}]")
         console.print("─" * 40, style=theme.border)
@@ -53,7 +60,7 @@ def auth_cmd() -> None:
         console.print("\n".join(content))
         console.print()
 
-        choice = console.input(f"[{theme.prompt}]Select option (1-6) : [/{theme.prompt}]").strip()
+        choice = console.input(f"[{theme.prompt}]Select option (1-7) : [/{theme.prompt}]").strip()
 
         if choice == "1":
             _configure_github()
@@ -62,10 +69,12 @@ def auth_cmd() -> None:
         elif choice == "3":
             _configure_nvidia_nim()
         elif choice == "4":
-            _test_connections()
+            _configure_stitch()
         elif choice == "5":
+            _test_connections()
+        elif choice == "6":
             _remove_credentials()
-        elif choice == "6" or choice.lower() in ("exit", "back"):
+        elif choice == "7" or choice.lower() in ("exit", "back"):
             break
         else:
             error("Invalid choice.")
@@ -74,7 +83,7 @@ def auth_cmd() -> None:
 def _configure_github() -> None:
     """Prompt and validate GitHub credentials."""
     rprint()
-    username = console.input("[bold cyan]  GitHub Username             : [/bold cyan]").strip()
+    username = console.input("[bold cyan]  GitHub Username              : [/bold cyan]").strip()
     token = get_masked_input("[bold cyan]  GitHub Personal Access Token : [/bold cyan]")
 
     if not username or not token:
@@ -134,14 +143,56 @@ def _configure_nvidia_nim() -> None:
         error("Invalid NVIDIA API Key.")
 
 
+def _configure_stitch() -> None:
+    """Configure Google Stitch Design Provider credentials."""
+    rprint()
+    rprint("[bold bright_white]Configure Google Stitch[/bold bright_white]")
+    rprint("[dim]  Google Stitch is a Design Provider — not an AI model.[/dim]")
+    rprint("[dim]  It generates professional UI layouts, design systems, and component hierarchies.[/dim]")
+    rprint()
+    rprint("[bold white]Configuration Options:[/bold white]")
+    rprint("  [bold cyan]1[/bold cyan]. Set API Key  [dim](REST API — available when Stitch GA launches)[/dim]")
+    rprint("  [bold cyan]2[/bold cyan]. Set MCP Server  [dim](Stitch MCP integration)[/dim]")
+    rprint("  [bold cyan]3[/bold cyan]. Cancel")
+    rprint()
+
+    sub = console.input("[bold yellow]Select option (1-3) : [/bold yellow]").strip()
+
+    settings = _load()
+
+    if sub == "1":
+        key = get_masked_input("[bold cyan]  Google Stitch API Key : [/bold cyan]")
+        if not key:
+            error("API Key is required.")
+            return
+        settings["stitch_api_key"] = key
+        save_settings(settings)
+        success("Google Stitch API Key saved.")
+        rprint("[dim]  Note: The Stitch REST API is in early access. GC will auto-detect availability at runtime.[/dim]")
+
+    elif sub == "2":
+        mcp_name = console.input("[bold cyan]  Stitch MCP Server Name : [/bold cyan]").strip()
+        if not mcp_name:
+            error("MCP Server name is required.")
+            return
+        settings["stitch_mcp_server"] = mcp_name
+        save_settings(settings)
+        success(f"Google Stitch MCP Server '{mcp_name}' saved.")
+
+    else:
+        rprint("[dim]  Cancelled.[/dim]")
+
+
 def _test_connections() -> None:
-    """Test connections to GitHub, OpenRouter, and NVIDIA NIM APIs."""
+    """Test connections to GitHub, OpenRouter, NVIDIA NIM, and Google Stitch."""
     rprint()
     settings = _load()
     gh_user = settings.get("github_username", "")
     gh_tok = settings.get("github_token", "")
     or_key = settings.get("openrouter_api_key", "")
     nv_key = settings.get("nvidia_api_key", "")
+    st_key = settings.get("stitch_api_key", "")
+    st_mcp = settings.get("stitch_mcp_server", "")
 
     # GitHub
     if gh_user and gh_tok:
@@ -176,6 +227,21 @@ def _test_connections() -> None:
     else:
         warning("NVIDIA NIM: Not configured")
 
+    # Google Stitch
+    if st_key or st_mcp:
+        with console.status("[bold yellow]Testing Google Stitch Connection...[/bold yellow]", spinner="dots"):
+            from github_companion.design.stitch_provider import StitchProvider
+            sp = StitchProvider(api_key=st_key, mcp_server=st_mcp)
+            stitch_ok = sp.health_check()
+        if stitch_ok:
+            success("Google Stitch: Connection successful")
+        else:
+            warning(
+                "Google Stitch: API not reachable (REST API in early access — will auto-fallback to Internal Designer)"
+            )
+    else:
+        warning("Google Stitch: Not configured")
+
 
 def _remove_credentials() -> None:
     """Remove user credentials interactively."""
@@ -184,11 +250,12 @@ def _remove_credentials() -> None:
     rprint("  [bold cyan]1[/bold cyan]. Remove GitHub credentials")
     rprint("  [bold cyan]2[/bold cyan]. Remove OpenRouter credentials")
     rprint("  [bold cyan]3[/bold cyan]. Remove NVIDIA NIM credentials")
-    rprint("  [bold cyan]4[/bold cyan]. Remove All")
-    rprint("  [bold cyan]5[/bold cyan]. Cancel")
+    rprint("  [bold cyan]4[/bold cyan]. Remove Google Stitch credentials")
+    rprint("  [bold cyan]5[/bold cyan]. Remove All")
+    rprint("  [bold cyan]6[/bold cyan]. Cancel")
     rprint()
 
-    choice = console.input("[bold yellow]Select option (1-5) : [/bold yellow]").strip()
+    choice = console.input("[bold yellow]Select option (1-6) : [/bold yellow]").strip()
     settings = _load()
 
     if choice == "1":
@@ -205,10 +272,17 @@ def _remove_credentials() -> None:
         save_settings(settings)
         success("NVIDIA NIM key removed.")
     elif choice == "4":
+        settings["stitch_api_key"] = ""
+        settings["stitch_mcp_server"] = ""
+        save_settings(settings)
+        success("Google Stitch credentials removed.")
+    elif choice == "5":
         settings["github_username"] = ""
         settings["github_token"] = ""
         settings["openrouter_api_key"] = ""
         settings["nvidia_api_key"] = ""
+        settings["stitch_api_key"] = ""
+        settings["stitch_mcp_server"] = ""
         save_settings(settings)
         success("All credentials removed.")
     else:

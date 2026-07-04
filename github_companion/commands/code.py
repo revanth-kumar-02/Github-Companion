@@ -17,7 +17,7 @@ from github_companion.ai.providers.ollama_provider import OllamaProvider
 from github_companion.ai.providers.openrouter_provider import OpenRouterProvider
 from github_companion.ai.providers.nvidia_provider import NvidiaProvider
 from github_companion.ai.engineering_analysis import EngineeringAnalysisEngine
-from github_companion.ai.design_director import DesignDirector
+from github_companion.design.design_registry import select_design_provider
 from github_companion.services.theme_service import get_active_theme_obj
 from github_companion.services.config_service import (
     get_custom_models,
@@ -159,18 +159,24 @@ def start_code_mode() -> None:
             rprint("[dim]  Cancelled by user.[/dim]")
             return
 
-    # ── AI Design Director Stage ──────────────────────────────────────────────
+    # ── Design Provider Selection & Generation ───────────────────────────────
+    designer = select_design_provider(provider)
+
     design_spec = None
-    with console.status("[bold yellow]Running AI Design Director...[/bold yellow]", spinner="dots"):
-        design_spec = DesignDirector.analyze(provider, project_idea, expanded_spec)
-        
+    with console.status(
+        f"[bold yellow]Running {designer.name}...[/bold yellow]", spinner="dots"
+    ):
+        design_spec = designer.generate_design(project_idea, expanded_spec)
+
     if design_spec:
-        DesignDirector.display(design_spec)
+        designer.display(design_spec)
         rprint()
         proceed = console.input("[bold yellow]Proceed to detailed Implementation Planning? (y/n) [y]: [/bold yellow]").strip().lower()
         if proceed not in ("", "y", "yes"):
             rprint("[dim]  Cancelled by user.[/dim]")
             return
+    else:
+        rprint("[bold yellow]⚠  Design generation did not produce a specification. Continuing without design context.[/bold yellow]")
 
     # ── Planning Stage ────────────────────────────────────────────────────────
     plan = _generate_plan(provider, project_idea, expanded_spec, design_spec)
