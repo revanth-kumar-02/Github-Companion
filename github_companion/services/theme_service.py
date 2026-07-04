@@ -26,11 +26,88 @@ def set_active_theme(theme_name: str) -> bool:
 
 
 def get_active_theme_obj() -> CompanionTheme:
-    """Return the active CompanionTheme object."""
-    active = get_active_theme()
-    if active not in THEMES:
-        active = "default"
-    return THEMES[active]
+    """Return the active CompanionTheme object, guaranteeing to never fail or raise NameError."""
+    try:
+        active = get_active_theme()
+        if active not in THEMES:
+            active = "default"
+        if active in THEMES:
+            return THEMES[active]
+    except Exception as e:
+        import sys
+        print(f"[dim]Theme warning: Theme loading failed ({e}). Falling back to default theme.[/dim]", file=sys.stderr)
+        
+    if "default" in THEMES:
+        return THEMES["default"]
+        
+    # Double fallback if registry itself was somehow corrupted
+    from github_companion.config.themes import CompanionTheme
+    return CompanionTheme(
+        name="default",
+        banner="bold bright_blue",
+        header="bold bright_white",
+        table_header="bold bright_blue",
+        command="bold bright_cyan",
+        category="bold gold1",
+        description="white",
+        success="bold green",
+        warning="bold yellow",
+        error="bold red",
+        prompt="bold blue",
+        border="dim cyan",
+        highlight="bright_cyan",
+        category_colors={
+            "GitHub": "bold bright_cyan",
+            "Repository": "bold hot_pink",
+            "Utility": "bold bright_magenta",
+            "AI Agent": "bold bright_red",
+            "Workspace": "bold gold1",
+            "System": "bold sky_blue1",
+        }
+    )
+
+
+def validate_themes_startup() -> None:
+    """Validate that the theme registry is loaded, active theme is present, and falls back to default if not."""
+    try:
+        # 1. Check registry
+        if not THEMES or "default" not in THEMES:
+            from github_companion.config.themes import CompanionTheme
+            THEMES["default"] = CompanionTheme(
+                name="default",
+                banner="bold bright_blue",
+                header="bold bright_white",
+                table_header="bold bright_blue",
+                command="bold bright_cyan",
+                category="bold gold1",
+                description="white",
+                success="bold green",
+                warning="bold yellow",
+                error="bold red",
+                prompt="bold blue",
+                border="dim cyan",
+                highlight="bright_cyan",
+                category_colors={
+                    "GitHub": "bold bright_cyan",
+                    "Repository": "bold hot_pink",
+                    "Utility": "bold bright_magenta",
+                    "AI Agent": "bold bright_red",
+                    "Workspace": "bold gold1",
+                    "System": "bold sky_blue1",
+                }
+            )
+
+        # 2. Check configuration
+        settings = _load()
+        active = settings.get("theme", "default")
+        
+        # 3. Fallback
+        if active not in THEMES:
+            settings["theme"] = "default"
+            save_settings(settings)
+    except Exception:
+        # Gracefully handle all configuration reading or writing issues
+        pass
 
 
 def get_theme_styles() -> dict:

@@ -54,6 +54,10 @@ from github_companion.shell import start_shell
 def main():
     from github_companion.services.config_service import is_configured, run_startup_diagnostics
     from github_companion.services.setup_wizard import run_setup_wizard
+    from github_companion.services.theme_service import validate_themes_startup
+
+    # Run theme registry and configuration safety checks first
+    validate_themes_startup()
 
     run_startup_diagnostics()
 

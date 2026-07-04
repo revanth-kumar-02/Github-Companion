@@ -17,6 +17,7 @@ from github_companion.ai.providers.ollama_provider import OllamaProvider
 from github_companion.ai.providers.openrouter_provider import OpenRouterProvider
 from github_companion.ai.providers.nvidia_provider import NvidiaProvider
 from github_companion.ai.engineering_analysis import EngineeringAnalysisEngine
+from github_companion.services.theme_service import get_active_theme_obj
 from github_companion.services.config_service import (
     get_custom_models,
     get_ollama_host,
