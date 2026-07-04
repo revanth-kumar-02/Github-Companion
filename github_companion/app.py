@@ -46,6 +46,7 @@ from github_companion.commands.projects import show_gc_projects
 from github_companion.commands.theme import theme_cmd
 from github_companion.commands.tutor import tutor_cmd
 from github_companion.commands.clone import clone_repo
+from github_companion.commands.dashboard import show_gc_dashboard
 from github_companion.utils.ui import header
 from github_companion.shell import start_shell
 
@@ -64,8 +65,6 @@ def main():
     if len(sys.argv) == 1:
         start_shell()
         return
-
-    header()
 
     command = sys.argv[1].lower()
 
@@ -98,6 +97,7 @@ def main():
         "theme": theme_cmd,
         "tutor": tutor_cmd,
         "clone": clone_repo,
+        "dashboard": show_gc_dashboard,
     }
 
 

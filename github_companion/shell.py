@@ -43,6 +43,7 @@ from github_companion.commands.projects import show_gc_projects
 from github_companion.commands.theme import theme_cmd
 from github_companion.commands.tutor import tutor_cmd
 from github_companion.commands.clone import clone_repo
+from github_companion.commands.dashboard import show_gc_dashboard
 
 console = Console()
 
@@ -77,6 +78,7 @@ commands = {
     "theme": theme_cmd,
     "tutor": tutor_cmd,
     "clone": clone_repo,
+    "dashboard": show_gc_dashboard,
 }
 
 

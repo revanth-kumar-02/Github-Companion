@@ -14,13 +14,30 @@ console = Console()
 def header():
     theme = get_active_theme_obj()
     banner = r"""
- ██████╗  ██████╗
-██╔════╝ ██╔════╝
-██║  ███╗██║
-██║   ██║██║
-╚██████╔╝╚██████╗
- ╚═════╝ ╚═════╝
-    """
+  ██████╗  ██████╗
+ ██╔════╝ ██╔════╝
+ ██║  ███╗██║
+ ██║   ██║██║
+ ╚██████╔╝╚██████╗
+  ╚═════╝  ╚═════╝
+"""
+    console.print(banner, style=theme.banner)
+    console.print("GitHub Companion", style=f"bold {theme.header}")
+    console.print("Developer CLI • v0.1.1", style="dim")
+    console.print("─" * 51, style=theme.border)
+    console.print()
+
+
+def show_dashboard():
+    theme = get_active_theme_obj()
+    banner = r"""
+  ██████╗  ██████╗
+ ██╔════╝ ██╔════╝
+ ██║  ███╗██║
+ ██║   ██║██║
+ ╚██████╔╝╚██████╗
+  ╚═════╝  ╚═════╝
+"""
     
     banner_text = Text(banner, style=theme.banner)
     
