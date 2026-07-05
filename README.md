@@ -139,6 +139,73 @@ The autonomous coding agent follows a sequential feedback loop to guarantee code
 
 ---
 
+## 🚀 Installation on terminal
+
+GitHub Companion is available on PyPI and can be installed globally using `pip`.
+
+### Install
+
+```bash
+pip install github-companion
+```
+
+### Verify Installation
+
+```bash
+gc --version
+```
+
+or
+
+```bash
+gc version
+```
+
+If the installation is successful, you should see the current version of GitHub Companion.
+
+### First-Time Setup
+
+Run:
+
+```bash
+gc
+```
+
+On the first launch, GitHub Companion will guide you through a quick setup wizard to configure:
+
+- 🐙 GitHub Username
+- 🔑 GitHub Personal Access Token
+- 🤖 AI Provider (Ollama, OpenRouter, or NVIDIA NIM)
+- 🔐 Provider API Keys (if required)
+- 📁 Local Workspace Directory
+- 🎨 Preferred Theme
+
+Once configured, your settings are securely stored in:
+
+```text
+~/.gc/
+```
+
+GitHub Companion will automatically reuse these settings for future sessions, so setup is only required once.
+
+---
+
+### Upgrade
+
+```bash
+pip install --upgrade github-companion
+```
+
+---
+
+### Uninstall
+
+```bash
+pip uninstall github-companion
+```
+
+---
+
 ## 🚀 Getting Started
 
 ### Installation
