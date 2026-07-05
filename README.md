@@ -177,28 +177,6 @@ gc auth
 
 ---
 
-## 📸 Screenshots
-
-### CLI Banner
-*Placeholder: ASCII Banner output in terminal*
-
-### Help Command
-*Placeholder: Available commands table styled in active theme*
-
-### AI Coding Agent
-*Placeholder: Multi-turn autonomous planning log*
-
-### Heatmap
-*Placeholder: Green contribution grid with terminal tooltip*
-
-### GitHub Profile
-*Placeholder: Redesigned user dashboard card panel*
-
-### Theme System
-*Placeholder: Swapping presets between Dracula, Nord, and Synthwave*
-
----
-
 ## 🗺 Roadmap
 
 *   **Build & Test Runner**: Automated task runners integrated directly inside the agent loop.
