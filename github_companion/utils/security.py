@@ -39,7 +39,11 @@ SENSITIVE_DIR_NAMES = {
 # Block system roots on POSIX and Windows
 SYSTEM_ROOT_PREFIXES = (
     "/etc",
-    "/var",
+    "/var/log",
+    "/var/lib",
+    "/var/run",
+    "/var/root",
+    "/var/spool",
     "/usr",
     "/bin",
     "/sbin",
@@ -47,6 +51,7 @@ SYSTEM_ROOT_PREFIXES = (
     "/dev",
     "/proc",
     "/sys",
+    "/root",
     "c:\\windows",
     "c:\\program files",
     "c:\\program files (x86)",
@@ -77,9 +82,10 @@ def is_sensitive_path(path: Path) -> bool:
         if re.match(pattern, filename, re.IGNORECASE):
             return True
 
-    path_str = str(path).lower()
+    path_str = str(path).lower().replace("\\", "/")
     for prefix in SYSTEM_ROOT_PREFIXES:
-        if path_str.startswith(prefix):
+        norm_prefix = prefix.lower().replace("\\", "/")
+        if path_str == norm_prefix or path_str.startswith(norm_prefix + "/"):
             return True
 
     return False
@@ -107,10 +113,21 @@ def validate_safe_path(
     if not target_path or not str(target_path).strip():
         raise SecurityError("Path cannot be empty.")
 
+    target_str = str(target_path).strip()
+
+    # Normalize backslashes to forward slashes across all platforms
+    normalized = target_str.replace("\\", "/")
+
+    # Reject Windows drive-letter paths on POSIX systems (e.g. C:/Windows/...)
+    if os.name != "nt" and re.match(r"^[a-zA-Z]:", normalized):
+        raise SecurityError(
+            f"Path traversal detected: '{target_path}' resolves outside the allowed workspace."
+        )
+
     root = (Path(workspace_root) if workspace_root else get_effective_workspace_root()).resolve()
 
     try:
-        raw_path = Path(target_path)
+        raw_path = Path(normalized)
         if not raw_path.is_absolute():
             resolved_path = (root / raw_path).resolve()
         else:

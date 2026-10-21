@@ -31,6 +31,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov build
+          pip install -e .
 
       - name: Run test suite with coverage
         run: |
@@ -42,6 +43,6 @@ jobs:
 
       - name: Test wheel installation and CLI entrypoint
         run: |
-          pip install dist/*.whl
+          python -c "import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--force-reinstall', '--no-deps', glob.glob('dist/*.whl')[0]])"
           gc --version
           gc --help
