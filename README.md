@@ -165,6 +165,8 @@ gc version
 
 If the installation is successful, you should see the current version of GitHub Companion.
 
+> **💡 Note for Windows PowerShell users**: In Windows PowerShell, `gc` is a built-in alias for `Get-Content`. You can run `gc.exe`, `python -m github_companion.app`, or remove the alias in your PowerShell profile via `Remove-Item Alias:gc -ErrorAction SilentlyContinue`.
+
 ### First-Time Setup
 
 Run:

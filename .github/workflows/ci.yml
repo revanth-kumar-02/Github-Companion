@@ -10,6 +10,9 @@ jobs:
   test:
     name: Test on ${{ matrix.os }} - Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +46,6 @@ jobs:
 
       - name: Test wheel installation and CLI entrypoint
         run: |
-          python -c "import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--force-reinstall', '--no-deps', glob.glob('dist/*.whl')[0]])"
+          python -m pip install --find-links=dist --no-deps github-companion
           gc --version
           gc --help
