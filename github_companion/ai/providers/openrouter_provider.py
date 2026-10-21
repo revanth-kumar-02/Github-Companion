@@ -57,18 +57,14 @@ class OpenRouterProvider(BaseProvider):
             or os.environ.get("GC_DEBUG") == "true"
         )
         if debug_mode:
-            exists = self._api_key is not None
-            length = len(self._api_key) if self._api_key else 0
-            first_8 = self._api_key[:8] if length >= 8 else (self._api_key or "")
+            exists = bool(self._api_key)
             rprint()
             rprint("====================================================")
             rprint("Provider Initialized")
             rprint(f"Configuration Path: {CONFIG_PATH}")
             rprint(f"Provider: OpenRouter")
             rprint(f"Model: {self._model}")
-            rprint(f"API Key Exists: {exists}")
-            rprint(f"API Key Length: {length}")
-            rprint(f"First 8 characters: {first_8}")
+            rprint(f"API Key Configured: {exists}")
             rprint("====================================================")
             rprint()
 
@@ -89,9 +85,7 @@ class OpenRouterProvider(BaseProvider):
     ) -> Any:
         """Send a chat completion request to OpenRouter using self._api_key."""
         api_key = self._api_key
-        api_key_exists = api_key is not None
-        api_key_len = len(api_key) if api_key else 0
-        first_8 = api_key[:8] if api_key_len >= 8 else (api_key or "")
+        api_key_configured = bool(api_key)
 
         endpoint = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -122,24 +116,18 @@ class OpenRouterProvider(BaseProvider):
         )
 
         if debug_mode:
-            masked_key = f"Bearer {first_8}" + "*" * (api_key_len - 8) if api_key else "None"
             rprint()
             rprint("====================================================")
             rprint(f"Configuration Path          : {CONFIG_PATH}")
             rprint(f"Provider                    : OpenRouter")
             rprint(f"Model                       : {self._model}")
-            rprint(f"API Key Exists              : {api_key_exists}")
-            rprint(f"API Key Length              : {api_key_len}")
-            rprint(f"Provider Received API Key   : {first_8}...")
-            rprint(f"Provider Stored API Key     : {first_8}...")
+            rprint(f"API Key Configured          : {api_key_configured}")
             rprint(f"Authorization Header Exists : {auth_present}")
-            rprint(f"Authorization Header        : {masked_key}")
             rprint(f"Endpoint                    : {endpoint}")
             rprint("====================================================")
             rprint("Request")
             rprint(f"URL: {endpoint}")
             rprint(f"Model: {self._model}")
-            rprint(f"Messages: {json.dumps(messages, indent=2)}")
             rprint("====================================================")
             rprint()
 

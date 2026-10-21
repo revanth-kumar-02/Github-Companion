@@ -5,8 +5,9 @@ from rich.table import Table
 from rich import print as rprint
 
 from github_companion.services.config_service import CONFIG_PATH, _load, save_settings
-from github_companion.services.setup_wizard import run_setup_wizard
+from github_companion.services.setup_wizard import run_setup_wizard, get_masked_input
 from github_companion.utils.ui import success, error, info
+from github_companion.utils.security import mask_secret
 
 console = Console()
 
@@ -52,10 +53,8 @@ def _display_config() -> None:
 
     # Display settings, masking sensitive tokens
     for k, v in settings.items():
-        if k in ("github_token", "openrouter_api_key", "api_key", "nvidia_api_key") and v:
-            # Mask the token
-            masked = v[:6] + "*" * (len(v) - 6) if len(v) > 6 else "*" * 8
-            table.add_row(k, masked)
+        if k in ("github_token", "openrouter_api_key", "api_key", "nvidia_api_key", "stitch_api_key") and v:
+            table.add_row(k, mask_secret(v))
         elif k == "custom_models":
             table.add_row(k, f"{len(v)} custom model(s) registered")
         else:
@@ -82,7 +81,7 @@ def _edit_config() -> None:
     if username:
         settings["github_username"] = username
 
-    token = console.input("[bold cyan]  GitHub Token [/bold cyan][dim](Enter to keep current)[/dim] : ").strip()
+    token = get_masked_input("  GitHub Token (Enter to keep current) : ").strip()
     if token:
         settings["github_token"] = token
 
@@ -109,7 +108,7 @@ def _edit_config() -> None:
         if host:
             settings["ollama_host"] = host
     elif settings.get("provider") == "openrouter":
-        key = console.input("[bold cyan]  OpenRouter API Key [/bold cyan][dim](Enter to keep current)[/dim] : ").strip()
+        key = get_masked_input("  OpenRouter API Key (Enter to keep current) : ").strip()
         if key:
             settings["openrouter_api_key"] = key
 
@@ -148,13 +147,8 @@ def _config_ai() -> None:
         nv_key = settings.get("nvidia_api_key", "")
         coding_model = settings.get("coding_model", "qwen2.5-coder")
 
-        masked_or_key = "Not Configured"
-        if or_key:
-            masked_or_key = or_key[:6] + "*" * (len(or_key) - 6) if len(or_key) > 6 else "*" * 8
-
-        masked_nv_key = "Not Configured"
-        if nv_key:
-            masked_nv_key = nv_key[:6] + "*" * (len(nv_key) - 6) if len(nv_key) > 6 else "*" * 8
+        masked_or_key = mask_secret(or_key) if or_key else "Not Configured"
+        masked_nv_key = mask_secret(nv_key) if nv_key else "Not Configured"
 
         rprint()
         rprint("[bold bright_white]AI Configuration[/bold bright_white]")

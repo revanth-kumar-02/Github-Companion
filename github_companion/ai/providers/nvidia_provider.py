@@ -42,18 +42,14 @@ class NvidiaProvider(BaseProvider):
             or os.environ.get("GC_DEBUG") == "true"
         )
         if debug_mode:
-            exists = self._api_key is not None
-            length = len(self._api_key) if self._api_key else 0
-            first_8 = self._api_key[:8] if length >= 8 else (self._api_key or "")
+            exists = bool(self._api_key)
             rprint()
             rprint("====================================================")
             rprint("Provider Initialized")
             rprint(f"Configuration Path: {CONFIG_PATH}")
             rprint(f"Provider: NVIDIA NIM")
             rprint(f"Model: {self._model}")
-            rprint(f"API Key Exists: {exists}")
-            rprint(f"API Key Length: {length}")
-            rprint(f"First 8 characters: {first_8}")
+            rprint(f"API Key Configured: {exists}")
             rprint("====================================================")
             rprint()
 
@@ -72,9 +68,6 @@ class NvidiaProvider(BaseProvider):
     ) -> Any:
         """Send a completions request to NVIDIA NIM API."""
         api_key = self._api_key
-        api_key_exists = api_key is not None
-        api_key_len = len(api_key) if api_key else 0
-        first_8 = api_key[:8] if api_key_len >= 8 else (api_key or "")
 
         endpoint = f"{self.BASE_URL}/chat/completions"
 
@@ -104,14 +97,13 @@ class NvidiaProvider(BaseProvider):
         if debug_mode:
             masked_headers = dict(headers)
             if "Authorization" in masked_headers:
-                masked_headers["Authorization"] = f"Bearer {first_8}" + "*" * (api_key_len - 8) if api_key_len >= 8 else "Bearer ********"
+                masked_headers["Authorization"] = "Bearer ••••••••"
             rprint("\n[bold yellow]=== NVIDIA Request Diagnostics (DEBUG) ===[/bold yellow]")
             rprint(f"Provider:      NVIDIA NIM")
             rprint(f"Base URL:      {self.BASE_URL}")
             rprint(f"Full Endpoint: {endpoint}")
             rprint(f"Model ID:      {self._model}")
             rprint(f"Headers:       {json.dumps(masked_headers, indent=2)}")
-            rprint(f"Payload:       {json.dumps(payload, indent=2)}")
             rprint("[bold yellow]==========================================[/bold yellow]\n")
 
         import time

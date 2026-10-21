@@ -33,6 +33,13 @@ from github_companion.services.git_service import (
 )
 from github_companion.services.readme_service import generate_readme
 from github_companion.services.config_service import get_github_username
+from github_companion.utils.security import (
+    SecurityError,
+    validate_safe_path,
+    validate_safe_command,
+    requires_human_approval,
+    prompt_confirmation,
+)
 
 
 # ── Tool Schemas (OpenAI function-calling format) ──────────────────────────────
@@ -58,7 +65,7 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "delete_repository",
-            "description": "Permanently delete an existing GitHub repository.",
+            "description": "Permanently delete an existing GitHub repository. Requires explicit human confirmation by typing repository name.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -128,16 +135,15 @@ TOOL_SCHEMAS: list[dict] = [
             "name": "publish_project",
             "description": (
                 "Publish a local project folder to GitHub. "
-                "Runs the complete workflow: create repository → git init → "
-                "git add → git commit → rename branch to main → add remote → git push."
+                "Defaults to private repository. Requires explicit user confirmation."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "project_path":   {"type": "string",  "description": "Absolute or relative path to the project folder"},
+                    "project_path":   {"type": "string",  "description": "Path to the project folder inside the workspace"},
                     "repo_name":      {"type": "string",  "description": "Name for the new GitHub repository"},
                     "description":    {"type": "string",  "description": "Repository description"},
-                    "private":        {"type": "boolean", "description": "True for private, False for public"},
+                    "private":        {"type": "boolean", "description": "True for private, False for public (default: True)"},
                     "commit_message": {"type": "string",  "description": "Initial commit message (default: 'Initial commit')"},
                 },
                 "required": ["project_path", "repo_name"],
@@ -184,11 +190,11 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "list_directory",
-            "description": "List all files and subdirectories in a given directory.",
+            "description": "List all files and subdirectories in a workspace directory.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Directory path to list (defaults to current directory)"},
+                    "path": {"type": "string", "description": "Directory path to list within workspace (defaults to current directory)"},
                 },
                 "required": [],
             },
@@ -198,11 +204,11 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Read the text contents of a file (capped at 8 KB).",
+            "description": "Read the text contents of a workspace file (capped at 8 KB). Blocked outside workspace or for sensitive files.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Path to the file to read"},
+                    "path": {"type": "string", "description": "Path to the file to read within workspace"},
                 },
                 "required": ["path"],
             },
@@ -212,11 +218,11 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Write or create a file with the specified content (creates directories automatically).",
+            "description": "Write or create a file within the workspace (creates directories automatically). Blocked outside workspace or for sensitive files.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Path to the file to write"},
+                    "path": {"type": "string", "description": "Path to the file to write within workspace"},
                     "content": {"type": "string", "description": "Full content to write to the file"},
                 },
                 "required": ["path", "content"],
@@ -227,11 +233,11 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "execute_command",
-            "description": "Execute a terminal command locally.",
+            "description": "Execute an allowlisted developer tool command locally (git, python, pytest, npm, cargo). Shell chaining is forbidden; modifying commands require user approval.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "command": {"type": "string", "description": "The command string to execute in the shell"},
+                    "command": {"type": "string", "description": "The command string to execute (e.g. 'pytest', 'git status')"},
                 },
                 "required": ["command"],
             },
@@ -277,10 +283,26 @@ def _create_repository(args: dict) -> str:
 
 
 def _delete_repository(args: dict) -> str:
-    resp = repo_delete(args["repo_name"])
+    repo_name = args.get("repo_name", "").strip()
+    if not repo_name:
+        return "Repository deletion failed: repo_name is required."
+
+    confirm_prompt = (
+        f"\n[DANGER] AI requested permanent deletion of GitHub repository '{repo_name}'.\n"
+        f"To confirm, type the exact repository name '{repo_name}': "
+    )
+    if not prompt_confirmation(confirm_prompt, expected_match=repo_name):
+        return f"Repository deletion cancelled: Confirmation mismatched or rejected by user."
+
+    resp = repo_delete(repo_name)
     if resp.status_code == 204:
-        return f"Repository '{args['repo_name']}' deleted successfully."
-    return f"Failed to delete repository: {resp.json().get('message', 'Unknown error')}"
+        return f"Repository '{repo_name}' deleted successfully."
+    err = "Unknown error"
+    try:
+        err = resp.json().get("message", "Unknown error")
+    except Exception:
+        pass
+    return f"Failed to delete repository: {err}"
 
 
 def _rename_repository(args: dict) -> str:
@@ -336,34 +358,66 @@ def _get_repositories(args: dict) -> str:
 
 
 def _publish_project(args: dict) -> str:
-    project_path = os.path.abspath(args["project_path"])
-    if not os.path.isdir(project_path):
-        return f"Project folder not found: {project_path}"
+    raw_path = args.get("project_path", "")
+    try:
+        safe_path = validate_safe_path(raw_path)
+    except (SecurityError, FileNotFoundError) as exc:
+        return f"Publishing failed: {exc}"
 
-    repo_name   = args["repo_name"]
+    if not os.path.isdir(safe_path):
+        return f"Project folder not found or not a directory: {safe_path}"
+
+    repo_name = args.get("repo_name", "").strip()
+    if not repo_name:
+        return "Publishing failed: repo_name is required."
+
     description = args.get("description", "")
-    private     = args.get("private", False)
-    commit_msg  = args.get("commit_message", "Initial commit")
-    username    = get_github_username()
+    # Default to PRIVATE for safety
+    private = args.get("private", True)
+    commit_msg = args.get("commit_message", "Initial commit")
+    username = get_github_username()
+    if not username:
+        return "Publishing failed: GitHub username is not configured."
+
+    visibility_str = "Private" if private else "Public"
+    confirm_prompt = (
+        f"\nPublish local project '{safe_path}' to GitHub repository '{repo_name}'?\n"
+        f"  Visibility : {visibility_str}\n"
+        f"  Branch     : main\n"
+        f"Confirm publish? (y/N): "
+    )
+    if not prompt_confirmation(confirm_prompt):
+        return "Publishing cancelled: User confirmation was not granted."
 
     # Step 1: Create GitHub repository
     resp = repo_create(repo_name, description, private)
     if resp.status_code != 201:
-        return f"Failed to create repository: {resp.json().get('message', 'Unknown error')}"
-    html_url   = resp.json()["html_url"]
+        err = "Unknown error"
+        try:
+            err = resp.json().get("message", "Unknown error")
+        except Exception:
+            pass
+        return f"Failed to create repository: {err}"
+
+    data = resp.json()
+    html_url = data.get("html_url", f"https://github.com/{username}/{repo_name}")
     remote_url = f"https://{username}@github.com/{username}/{repo_name}.git"
 
-    # Step 2: Full git workflow
-    git_init(project_path)
-    git_add(project_path)
-    git_commit(project_path, commit_msg)
-    git_branch(project_path, "main")
-    git_remote_add(project_path, remote_url)
-    git_push(project_path)
+    # Step 2: Git workflow with error detection
+    try:
+        git_init(str(safe_path))
+        git_add(str(safe_path))
+        git_commit(str(safe_path), commit_msg)
+        git_branch(str(safe_path), "main")
+        git_remote_add(str(safe_path), remote_url)
+        git_push(str(safe_path))
+    except Exception as exc:
+        return f"Repository created ({html_url}) but Git push workflow encountered an error: {exc}"
 
     return (
         f"Project published successfully!\n"
         f"  Repository : {html_url}\n"
+        f"  Visibility : {visibility_str}\n"
         f"  Branch     : main\n"
         f"  Commit     : '{commit_msg}'"
     )
@@ -371,7 +425,12 @@ def _publish_project(args: dict) -> str:
 
 def _generate_readme(args: dict) -> str:
     output_folder = args.get("output_folder", ".")
-    os.makedirs(output_folder, exist_ok=True)
+    try:
+        safe_folder = validate_safe_path(output_folder, allow_create=True)
+    except SecurityError as exc:
+        return f"README generation failed: {exc}"
+
+    os.makedirs(safe_folder, exist_ok=True)
     data = {
         "name":         args.get("project_name", "Project"),
         "description":  args.get("description", ""),
@@ -382,17 +441,23 @@ def _generate_readme(args: dict) -> str:
         "license":      args.get("license", "MIT"),
         "author":       args.get("author", ""),
     }
-    path = generate_readme(data, output_folder)
+    path = generate_readme(data, str(safe_folder))
     return f"README.md generated at: {path}"
 
 
 def _git_status(args: dict) -> str:
     path = args.get("path", ".")
+    try:
+        safe_path = validate_safe_path(path)
+    except SecurityError as exc:
+        return f"Security check failed: {exc}"
+
     result = subprocess.run(
         ["git", "status"],
-        cwd=path,
+        cwd=str(safe_path),
         capture_output=True,
         text=True,
+        timeout=15,
     )
     return result.stdout or result.stderr or "No git output."
 
@@ -400,43 +465,63 @@ def _git_status(args: dict) -> str:
 def _list_directory(args: dict) -> str:
     path = args.get("path", ".")
     try:
-        entries = sorted(os.listdir(path))
-        dirs    = [e + "/" for e in entries if os.path.isdir(os.path.join(path, e))]
-        files   = [e for e in entries if os.path.isfile(os.path.join(path, e))]
-        return f"Directory: {os.path.abspath(path)}\n" + "\n".join(dirs + files)
+        safe_path = validate_safe_path(path)
+        entries = sorted(os.listdir(safe_path))
+        dirs    = [e + "/" for e in entries if os.path.isdir(os.path.join(safe_path, e))]
+        files   = [e for e in entries if os.path.isfile(os.path.join(safe_path, e))]
+        return f"Directory: {safe_path}\n" + "\n".join(dirs + files)
     except Exception as exc:
         return f"Error listing directory: {exc}"
 
 
 def _read_file(args: dict) -> str:
-    file_path = args["path"]
+    file_path = args.get("path", "")
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
+        safe_path = validate_safe_path(file_path)
+        with open(safe_path, "r", encoding="utf-8", errors="ignore") as fh:
             content = fh.read(8000)  # Cap at 8 KB to avoid token overflow
-        return f"--- {file_path} ---\n{content}"
+        return f"--- {safe_path} ---\n{content}"
+    except SecurityError as exc:
+        return f"Security check failed: {exc}"
     except Exception as exc:
         return f"Error reading file: {exc}"
 
 
 def _write_file(args: dict) -> str:
-    path = args["path"]
-    content = args["content"]
+    path = args.get("path", "")
+    content = args.get("content", "")
     try:
-        abs_path = os.path.abspath(path)
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-        with open(abs_path, "w", encoding="utf-8") as f:
+        safe_path = validate_safe_path(path, allow_create=True)
+        os.makedirs(os.path.dirname(safe_path), exist_ok=True)
+        with open(safe_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"Successfully wrote {len(content)} characters to '{path}'"
+        return f"Successfully wrote {len(content)} characters to '{safe_path}'"
+    except SecurityError as exc:
+        return f"Security check failed: {exc}"
     except Exception as exc:
         return f"Error writing file: {exc}"
 
 
 def _execute_command(args: dict) -> str:
-    cmd = args["command"]
+    cmd = args.get("command", "")
+    is_safe, reason, argv = validate_safe_command(cmd)
+    if not is_safe or not argv:
+        return f"Security check failed: {reason}"
+
+    needs_approval, approval_reason = requires_human_approval(argv)
+    if needs_approval:
+        confirm_prompt = (
+            f"\n[SECURITY] AI requested command that modifies state: '{cmd}'\n"
+            f"Reason: {approval_reason}\n"
+            f"Allow execution? (y/N): "
+        )
+        if not prompt_confirmation(confirm_prompt):
+            return f"Execution rejected: User denied approval for command '{cmd}'."
+
     try:
         result = subprocess.run(
-            cmd,
-            shell=True,
+            argv,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=30,
@@ -447,6 +532,8 @@ def _execute_command(args: dict) -> str:
         if result.stderr:
             output += f"STDERR:\n{result.stderr}\n"
         return output
+    except subprocess.TimeoutExpired:
+        return "Error executing command: Command timed out after 30 seconds."
     except Exception as exc:
         return f"Error executing command: {exc}"
 

@@ -16,8 +16,13 @@ def is_configured() -> bool:
 
 
 def ensure_gc_directories() -> None:
-    """Ensure all required .gc directories exist."""
+    """Ensure all required .gc directories exist with restricted permissions."""
     GC_DIR.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        try:
+            os.chmod(GC_DIR, 0o700)
+        except Exception:
+            pass
     (GC_DIR / "cache").mkdir(parents=True, exist_ok=True)
     (GC_DIR / "logs").mkdir(parents=True, exist_ok=True)
     (GC_DIR / "sessions").mkdir(parents=True, exist_ok=True)
@@ -25,6 +30,11 @@ def ensure_gc_directories() -> None:
     if not history_file.exists():
         with open(history_file, "w") as f:
             json.dump([], f)
+        if os.name != "nt":
+            try:
+                os.chmod(history_file, 0o600)
+            except Exception:
+                pass
 
 
 def _load() -> dict:
@@ -35,7 +45,6 @@ def _load() -> dict:
         with open(CONFIG_PATH, "r") as f:
             try:
                 data = json.load(f)
-                import os
                 from rich import print as rprint
                 debug_mode = (
                     os.environ.get("DEBUG") == "True"
@@ -47,9 +56,9 @@ def _load() -> dict:
                     gh_detected = bool(data.get("github_token"))
                     rprint()
                     rprint("Config loaded successfully")
-                    rprint(f"OpenRouter key detected: {or_detected}")
-                    rprint(f"NVIDIA NIM key detected: {nv_detected}")
-                    rprint(f"GitHub token detected: {gh_detected}")
+                    rprint(f"OpenRouter configured: {or_detected}")
+                    rprint(f"NVIDIA NIM configured: {nv_detected}")
+                    rprint(f"GitHub token configured: {gh_detected}")
                     rprint()
                 return data
             except Exception:
@@ -160,13 +169,17 @@ def get_stitch_mcp_server() -> str:
 
 
 def save_settings(settings: dict) -> None:
-    """Save the settings dict back to config.json."""
+    """Save the settings dict back to config.json with secure file permissions."""
     with _config_lock:
         ensure_gc_directories()
         with open(CONFIG_PATH, "w") as f:
             json.dump(settings, f, indent=4)
+        if os.name != "nt":
+            try:
+                os.chmod(CONFIG_PATH, 0o600)
+            except Exception:
+                pass
 
-    import os
     from rich import print as rprint
     debug_mode = (
         os.environ.get("DEBUG") == "True"
@@ -174,16 +187,16 @@ def save_settings(settings: dict) -> None:
     )
     if debug_mode:
         keys = list(settings.keys())
-        or_val = settings.get("openrouter_api_key", "")
-        or_len = len(or_val) if or_val else 0
-        nv_val = settings.get("nvidia_api_key", "")
-        nv_len = len(nv_val) if nv_val else 0
+        or_exists = bool(settings.get("openrouter_api_key"))
+        nv_exists = bool(settings.get("nvidia_api_key"))
+        gh_exists = bool(settings.get("github_token"))
         rprint()
         rprint("✓ Config saved")
         rprint(f"Path: {CONFIG_PATH}")
         rprint(f"Stored keys: {keys}")
-        rprint(f"OpenRouter key length: {or_len}")
-        rprint(f"NVIDIA NIM key length: {nv_len}")
+        rprint(f"OpenRouter configured: {or_exists}")
+        rprint(f"NVIDIA NIM configured: {nv_exists}")
+        rprint(f"GitHub token configured: {gh_exists}")
         rprint()
 
 
@@ -207,8 +220,7 @@ def get_default_workspace() -> str:
 
 
 def run_startup_diagnostics() -> None:
-    """Print configuration diagnostics if GC_DEBUG or DEBUG env variable is set."""
-    import os
+    """Print configuration diagnostics if GC_DEBUG or DEBUG env variable is set (never exposing secrets or key lengths)."""
     from rich import print as rprint
     debug_mode = (
         os.environ.get("DEBUG") == "True"
@@ -220,24 +232,18 @@ def run_startup_diagnostics() -> None:
     exists = CONFIG_PATH.exists()
     keys = []
     or_exists = False
-    or_len = 0
     nv_exists = False
-    nv_len = 0
+    gh_exists = False
     mtime_str = "N/A"
     
     if exists:
         try:
-            # Bypass load diagnostics trigger by loading directly
             with open(CONFIG_PATH, "r") as f:
                 settings = json.load(f)
             keys = list(settings.keys())
-            or_val = settings.get("openrouter_api_key", "")
-            or_exists = bool(or_val)
-            or_len = len(or_val) if or_val else 0
-            
-            nv_val = settings.get("nvidia_api_key", "")
-            nv_exists = bool(nv_val)
-            nv_len = len(nv_val) if nv_val else 0
+            or_exists = bool(settings.get("openrouter_api_key"))
+            nv_exists = bool(settings.get("nvidia_api_key"))
+            gh_exists = bool(settings.get("github_token"))
             
             mtime = os.path.getmtime(CONFIG_PATH)
             import datetime
@@ -251,10 +257,9 @@ def run_startup_diagnostics() -> None:
     rprint(f"Config path: {CONFIG_PATH}")
     rprint(f"Config exists: {exists}")
     rprint(f"Keys present: {keys}")
-    rprint(f"OpenRouter key exists: {or_exists}")
-    rprint(f"OpenRouter key length: {or_len}")
-    rprint(f"NVIDIA NIM key exists: {nv_exists}")
-    rprint(f"NVIDIA NIM key length: {nv_len}")
+    rprint(f"OpenRouter configured: {or_exists}")
+    rprint(f"NVIDIA NIM configured: {nv_exists}")
+    rprint(f"GitHub token configured: {gh_exists}")
     rprint(f"Last modified time of config.json: {mtime_str}")
     rprint("====================================================")
     rprint()

@@ -49,7 +49,9 @@ def show_help():
         # AI Agent
         ("ai",        "AI Agent",     "Enter AI mode — use natural language to take actions"),
         ("ask",       "AI Agent",     "General AI assistant chatbot (no file edits/commands)"),
+        ("chat",      "AI Agent",     "Interactive multi-turn AI chat mode"),
         ("code",      "AI Agent",     "Autonomous AI Coding Agent (planning + generation)"),
+        ("plan",      "AI Agent",     "Generate implementation plan with reasoning model"),
         ("models",    "AI Agent",     "Register and manage custom AI models"),
         # Workspace
         ("workspace", "Workspace",    "Manage default GC-Projects workspace location"),
@@ -63,7 +65,7 @@ def show_help():
         ("doctor",    "System",       "Diagnose Git, GitHub, Internet, and AI. Try: 'doctor ai'"),
         ("tutor",     "System",       "Start interactive step-by-step developer tutorial"),
 
-        ("version",   "System",       "Show installed Git version"),
+        ("version",   "System",       "Show GitHub Companion and Git versions"),
         ("status",    "System",       "Show current Git status"),
         ("help",      "System",       "Show this help table"),
         ("exit",      "System",       "Exit the interactive shell"),

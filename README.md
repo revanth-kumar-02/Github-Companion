@@ -59,9 +59,11 @@ GitHub Companion is an intelligent developer CLI that combines GitHub automation
 ### AI Coding Agents & Models
 | Command | Category | Description |
 | :--- | :--- | :--- |
-| `ai` | AI | Enter interactive multi-turn AI chat mode |
+| `ai` | AI | Enter interactive multi-turn AI mode |
 | `ask` | AI | General AI assistant chatbot (no file edits or system commands) |
+| `chat` | AI | Interactive conversational AI coding session |
 | `code` | AI | Autonomous AI Coding Agent (planning, execution, and validation) |
+| `plan` | AI | Generate implementation plan with reasoning models |
 | `models` | AI | Register and manage custom AI models |
 
 ### Workspace & Projects
@@ -79,7 +81,7 @@ GitHub Companion is an intelligent developer CLI that combines GitHub automation
 | `config` | System | Display or edit current settings |
 | `doctor` | System | Run system environment diagnostics |
 | `status` | System | Show current local Git status |
-| `version` | System | Show installed Git CLI version |
+| `version` | System | Show installed GitHub Companion and Git CLI versions |
 | `help` | System | Show help tables |
 | `exit` | System | Exit the interactive shell |
 
@@ -228,7 +230,9 @@ pip uninstall github-companion
 
 4. Run the application:
    ```bash
-   python app.py
+   python -m github_companion.app
+   # or after editable install (`pip install -e .`):
+   gc
    ```
 
 ### First-Time Setup
@@ -241,6 +245,19 @@ Setup your credentials:
 ```bash
 gc auth
 ```
+
+---
+
+## 🔒 Security & Safety Guarantees
+
+GitHub Companion is engineered for safe local execution and distribution:
+*   **Workspace Jailing**: Path operations are strictly constrained to the workspace root using canonical path resolution (`relative_to` checks). Arbitrary path traversal (`../../`) and access to sensitive files (`.env*`, `.ssh/`, `.gc/`, certificates, private keys) are blocked.
+*   **Command Allowlist & Injection Defense**: Shell execution (`shell=True`) is banned. Developer commands run via parsed token lists against a strict allowlist (`git`, `pytest`, `python`, `npm`, `cargo`, `ruff`). Shell metacharacters (`&&`, `|`, `;`, `>`, `<`, backticks) and destructive utilities (`rm`, `del`, `powershell`, `curl`) are blocked.
+*   **Human-in-the-Loop Safeguards**: State-mutating commands (Git pushes, resets, package installations, branch/tag deletions) require interactive human confirmation. Destructive remote operations (e.g., repository deletion) require typing the exact repository name to confirm.
+*   **Private-by-Default Publishing**: When publishing local projects to GitHub, repository visibility defaults to **Private** with explicit confirmation displaying target visibility before remote creation.
+*   **Secret Masking**: API keys, tokens, and authorization credentials are fully masked in displays and scrubbed from debug logs.
+*   **Subprocess Resilience**: Explicit timeouts (10s–60s) protect all external API and Git subprocess calls, with strict non-zero exit code validation.
+*   **Safe Non-Interactive Mode**: Fails closed in CI or headless environments instead of hanging or silently authorizing destructive actions.
 
 ---
 

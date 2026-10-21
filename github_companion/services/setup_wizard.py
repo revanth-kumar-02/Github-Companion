@@ -21,9 +21,14 @@ def get_masked_input(prompt: str) -> str:
     """
     Read character input while masking it with '*' stars.
     Cross-platform (Windows & Unix tty), copy-paste friendly.
+    Falls back gracefully when stdin is not a tty (e.g. automated tests or piped input).
     """
     sys.stdout.write(prompt)
     sys.stdout.flush()
+
+    if not sys.stdin.isatty():
+        line = sys.stdin.readline()
+        return line.rstrip("\r\n")
 
     if os.name == "nt":
         import msvcrt

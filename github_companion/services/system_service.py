@@ -1,4 +1,5 @@
-"""System service for managing OS-level actions like file opening and process execution."""
+"""System service for managing OS-level actions with timeouts and secure process execution."""
+from __future__ import annotations
 import os
 import platform
 import subprocess
@@ -17,7 +18,11 @@ def open_directory(path: str) -> None:
 
 def launch_vscode(project_path: str) -> None:
     """Launch VS Code for the specified project path."""
-    subprocess.Popen(["code", project_path], shell=True)
+    try:
+        subprocess.Popen(["code", project_path])
+    except Exception:
+        # Fallback if code command is a shell script or batch on Windows
+        subprocess.Popen(f'code "{project_path}"', shell=True)
 
 
 def run_project_file(project_path: str, entry_file: str) -> None:
@@ -35,11 +40,21 @@ def run_project_file(project_path: str, entry_file: str) -> None:
             subprocess.Popen(["node", entry_file], cwd=project_path)
 
 
-def compile_python_file(file_path: str) -> subprocess.CompletedProcess:
+def compile_python_file(file_path: str, timeout: int = 15) -> subprocess.CompletedProcess:
     """Run py_compile on a python file to check for syntax/compilation issues."""
-    return subprocess.run([sys.executable, "-m", "py_compile", file_path], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, "-m", "py_compile", file_path],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
 
 
-def run_test_or_build(cmd: list[str] | str, cwd: str, shell: bool = False) -> subprocess.CompletedProcess:
-    """Run a test runner or builder command (e.g. npm test or cargo build)."""
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, shell=shell)
+def run_test_or_build(
+    cmd: list[str] | str,
+    cwd: str,
+    timeout: int = 60,
+    shell: bool = False,
+) -> subprocess.CompletedProcess:
+    """Run a test runner or builder command with an enforced timeout."""
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, shell=shell, timeout=timeout)
