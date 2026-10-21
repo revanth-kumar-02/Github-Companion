@@ -153,7 +153,7 @@ def doctor_cmd(args: list[str] = None) -> None:
 
     main_table = Table.grid(expand=True)
     main_table.add_row(table)
-    main_table.add_row(rprint)  # empty row
+    main_table.add_row("")  # empty row
     main_table.add_row(summary_msg)
 
     panel = Panel(

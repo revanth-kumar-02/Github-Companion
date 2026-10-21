@@ -49,3 +49,25 @@ def test_unconfigured_non_interactive_exits_safely():
          pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 1
+
+
+def test_doctor_command_renders_without_error(capsys):
+    """Ensure doctor command renders environment diagnostics cleanly without NotRenderableError."""
+    from github_companion.commands.doctor import doctor_cmd
+    with patch("requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"login": "testuser"}
+        doctor_cmd([])
+    captured = capsys.readouterr().out
+    assert "Diagnostics" in captured
+
+
+def test_doctor_ai_command_renders_without_error(capsys):
+    """Ensure doctor ai command renders AI connection diagnostics cleanly."""
+    from github_companion.commands.doctor import doctor_cmd
+    with patch("requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
+        doctor_cmd(["ai"])
+    captured = capsys.readouterr().out
+    assert "AI Provider Connection Diagnostics" in captured
+
